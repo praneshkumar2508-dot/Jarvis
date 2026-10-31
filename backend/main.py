@@ -125,8 +125,8 @@ def send_message(session_id: str, payload: schemas.ChatQueryRequest, db: Session
     db.commit()
     db.refresh(user_msg)
 
-    # 2. Generate Jarvis AI response
-    jarvis_reply_text = JarvisAIService.process_query(payload.query)
+    # 2. Generate Jarvis AI response with multi-turn history
+    jarvis_reply_text = JarvisAIService.process_query(payload.query, history=session_obj.messages)
 
     # 3. Save Jarvis Message
     jarvis_msg = models.ChatMessage(

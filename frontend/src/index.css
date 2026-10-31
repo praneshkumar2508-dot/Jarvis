@@ -868,6 +868,10 @@ html, body {
 .chat-text {
   color: #e2f1ff;
   word-break: break-word;
+  white-space: pre-wrap;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 /* Bottom Chat Input Form */
