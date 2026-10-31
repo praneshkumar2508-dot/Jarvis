@@ -19,7 +19,7 @@ JARVIS_SYSTEM_INSTRUCTION = """You are J.A.R.V.I.S. (Just A Rather Very Intellig
   • You can retrieve real-time atmospheric and weather telemetry for any city or region via `get_weather`.
   • You can search the live web for facts, articles, and current events via `search_web`.
 - You also possess extraordinary expertise in software engineering (Java, Python, C/C++, TypeScript, Rust, etc.), algorithms, mathematics, and science.
-- When the user asks for code, provide clean, robust, well-structured code blocks with concise explanations.
+- When the user asks for code or calculations, provide direct answers, clean code blocks, and concise explanations.
 - When asked to execute system actions (e.g., "open notepad", "mute volume", "take a screenshot", "what's the weather in Tokyo?"), invoke the appropriate tool and report the outcome gracefully.
 - Speak with articulate confidence, understated British charm, and intelligent precision."""
 
@@ -29,6 +29,12 @@ JARVIS_TOOLS = [
     system_tools.take_screenshot,
     system_tools.get_weather,
     system_tools.search_web,
+]
+
+# High-quota free tier models (1,500 requests/day, not restricted like 2.5-flash)
+CANDIDATE_MODELS = [
+    "gemini-2.5-flash-lite",         # High quota, super fast
+    "gemini-3.1-flash-lite-preview", # High quota, next-gen preview
 ]
 
 class JarvisAIService:
@@ -49,12 +55,12 @@ class JarvisAIService:
     @classmethod
     def process_query(cls, query: str, history: Optional[List] = None) -> str:
         """
-        Processes queries using Google Gemini with Automatic Function Calling (tools)
-        and conversational memory.
+        Processes queries using high-quota Google Gemini models with Automatic Function Calling (tools)
+        and strict alternating multi-turn memory.
         """
         api_key = cls.get_api_key()
 
-        # Hardcoded instant telemetry command
+        # Instant local telemetry command
         q_lower = query.lower().strip()
         if q_lower in ["run diagnostic", "run diagnostic scan", "run full diagnostics"]:
             return (
@@ -70,48 +76,70 @@ class JarvisAIService:
 
                 client = genai.Client(api_key=api_key)
 
-                # Format conversation history
+                # Format strictly alternating conversation history (user -> model -> user -> model)
                 chat_history = []
                 if history:
-                    for msg in history[-8:]:
+                    last_role = None
+                    for msg in history[-10:]:
+                        # Filter out internal anomaly or error strings
+                        if "anomaly:" in msg.text or "429" in msg.text:
+                            continue
                         role = "user" if msg.sender == "user" else "model"
-                        chat_history.append(
-                            types.Content(
-                                role=role,
-                                parts=[types.Part.from_text(text=msg.text)]
+                        # The first turn in Gemini history must be 'user'
+                        if not chat_history and role != "user":
+                            continue
+                        # Gemini requires strictly alternating roles
+                        if role != last_role:
+                            chat_history.append(
+                                types.Content(
+                                    role=role,
+                                    parts=[types.Part.from_text(text=msg.text)]
+                                )
+                            )
+                            last_role = role
+
+                last_error = None
+
+                # 1. Attempt with candidate models and desktop/web tools
+                for model_name in CANDIDATE_MODELS:
+                    try:
+                        chat = client.chats.create(
+                            model=model_name,
+                            config=types.GenerateContentConfig(
+                                system_instruction=JARVIS_SYSTEM_INSTRUCTION,
+                                tools=JARVIS_TOOLS,
+                                temperature=0.7,
+                            ),
+                            history=chat_history
+                        )
+                        response = chat.send_message(query)
+                        if response and response.text:
+                            return response.text.strip()
+                    except Exception as err:
+                        last_error = err
+                        continue
+
+                # 2. Fallback: try without tools if tool invocation had an issue
+                for model_name in CANDIDATE_MODELS:
+                    try:
+                        fallback_res = client.models.generate_content(
+                            model=model_name,
+                            contents=query,
+                            config=types.GenerateContentConfig(
+                                system_instruction=JARVIS_SYSTEM_INSTRUCTION
                             )
                         )
+                        if fallback_res and fallback_res.text:
+                            return fallback_res.text.strip()
+                    except Exception as err:
+                        last_error = err
+                        continue
 
-                # Create chat session with full desktop & web tools
-                chat = client.chats.create(
-                    model="gemini-2.5-flash",
-                    config=types.GenerateContentConfig(
-                        system_instruction=JARVIS_SYSTEM_INSTRUCTION,
-                        tools=JARVIS_TOOLS,
-                        temperature=0.7,
-                    ),
-                    history=chat_history
-                )
-
-                response = chat.send_message(query)
-                if response and response.text:
-                    return response.text.strip()
+                if last_error:
+                    return f"My neural link encountered an anomaly: {str(last_error)}. Standing by, sir."
 
             except Exception as e:
-                # If error, try fallback without tools or report cleanly
-                try:
-                    from google import genai
-                    from google.genai import types
-                    client = genai.Client(api_key=api_key)
-                    fallback_res = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=query,
-                        config=types.GenerateContentConfig(system_instruction=JARVIS_SYSTEM_INSTRUCTION)
-                    )
-                    if fallback_res and fallback_res.text:
-                        return fallback_res.text.strip()
-                except Exception as inner_e:
-                    return f"My neural link encountered an anomaly: {str(inner_e)}. Standing by, sir."
+                return f"My neural link encountered an anomaly: {str(e)}. Standing by, sir."
 
         # Offline fallback if API key is missing
         now = datetime.now()
