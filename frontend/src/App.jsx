@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import HudHeader from './components/HudHeader';
 import ArcReactorVisualizer from './components/ArcReactorVisualizer';
 import TelemetryPanel from './components/TelemetryPanel';
 import CommandLogPanel from './components/CommandLogPanel';
 import HudFooter from './components/HudFooter';
+import WakeupOverlay from './components/WakeupOverlay';
 import { soundFX } from './utils/audioEffects';
 import { JarvisSpeech } from './utils/speechService';
+import { ClapDetector } from './utils/clapDetector';
+import { Mic, MicOff, Volume2, Power } from 'lucide-react';
 import {
   checkBackendHealth,
   fetchSessions,
@@ -24,6 +27,13 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
 
+  // Wakeup & Standby State (Starts in Dormant Standby mode on home screen)
+  const [isAwake, setIsAwake] = useState(false);
+  const [isWakingUp, setIsWakingUp] = useState(false);
+  const [micVolume, setMicVolume] = useState(0);
+  const [wakeStatusText, setWakeStatusText] = useState('STANDBY // CLAP OR SNAP TO WAKE J.A.R.V.I.S.');
+  const [interimTranscript, setInterimTranscript] = useState('');
+
   // Chat sessions state
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
@@ -33,8 +43,20 @@ export default function App() {
   );
 
   const speechRef = useRef(null);
+  const clapDetectorRef = useRef(null);
+  const isAwakeRef = useRef(false);
+  const isWakingUpRef = useRef(false);
 
-  // 1. Initialize Speech System & Boot Audio
+  // Keep refs synchronized
+  useEffect(() => {
+    isAwakeRef.current = isAwake;
+  }, [isAwake]);
+
+  useEffect(() => {
+    isWakingUpRef.current = isWakingUp;
+  }, [isWakingUp]);
+
+  // 1. Initialize Speech System
   useEffect(() => {
     speechRef.current = new JarvisSpeech(
       () => setIsJarvisSpeaking(true),
@@ -42,17 +64,35 @@ export default function App() {
     );
     speechRef.current.ttsEnabled = ttsEnabled;
 
-    const bootTimer = setTimeout(() => {
-      soundFX.playBoot();
-    }, 600);
-
     return () => {
-      clearTimeout(bootTimer);
       if (speechRef.current) speechRef.current.stopSpeaking();
     };
   }, []);
 
-  // 2. Initialize Backend Connection & Load Saved Sessions from Database
+  // 2. Initialize Acoustic Clap Detector
+  useEffect(() => {
+    const handleVolume = (vol) => {
+      setMicVolume(vol);
+    };
+
+    const handleClap = () => {
+      if (!isAwakeRef.current && !isWakingUpRef.current) {
+        console.log('[CLAP DETECTED] Triggering J.A.R.V.I.S. awakening sequence...');
+        triggerWakeup();
+      }
+    };
+
+    clapDetectorRef.current = new ClapDetector(handleClap, handleVolume);
+    clapDetectorRef.current.start();
+
+    return () => {
+      if (clapDetectorRef.current) {
+        clapDetectorRef.current.stop();
+      }
+    };
+  }, []);
+
+  // 3. Initialize Backend Connection & Load Saved Sessions from Database
   useEffect(() => {
     async function initDatabase() {
       const isHealthy = await checkBackendHealth();
@@ -208,14 +248,148 @@ export default function App() {
     }
   };
 
+  // ============================================================
+  // WAKEUP & STANDBY CONTROLLER
+  // ============================================================
+  const triggerWakeup = useCallback(() => {
+    if (isAwakeRef.current || isWakingUpRef.current) return;
+
+    setIsWakingUp(true);
+    setWakeStatusText('ARC REACTOR IGNITING // ENERGIZING...');
+
+    // Stop clap detector while active to free mic for speech recognition
+    if (clapDetectorRef.current) {
+      clapDetectorRef.current.stop();
+    }
+
+    // Play awakening audio sequence
+    soundFX.playWakeup();
+
+    // 1600ms ignition animation and boot sequence
+    setTimeout(() => {
+      setIsWakingUp(false);
+      setIsAwake(true);
+      isAwakeRef.current = true;
+
+      const greeting = 'Good day, sir. Systems energized and online. Standing by for your voice directives.';
+      setStatusMessage(greeting);
+
+      if (speechRef.current) {
+        speechRef.current.speak(greeting, () => {
+          // Immediately engage continuous hands-free voice listening
+          startContinuousVoice();
+        });
+      } else {
+        startContinuousVoice();
+      }
+    }, 1600);
+  }, []);
+
+  const handleSleep = useCallback(() => {
+    const farewell = 'Powering down to standby mode, sir. Clap to wake me.';
+    setStatusMessage(farewell);
+
+    if (speechRef.current) {
+      speechRef.current.stopListening();
+      speechRef.current.speak(farewell, () => {
+        soundFX.playPowerDown();
+        setIsAwake(false);
+        isAwakeRef.current = false;
+        setIsListening(false);
+        setInterimTranscript('');
+        setWakeStatusText('STANDBY // CLAP OR SNAP TO WAKE J.A.R.V.I.S.');
+        if (clapDetectorRef.current) {
+          clapDetectorRef.current.start();
+        }
+      });
+    } else {
+      soundFX.playPowerDown();
+      setIsAwake(false);
+      isAwakeRef.current = false;
+      setIsListening(false);
+      setInterimTranscript('');
+      setWakeStatusText('STANDBY // CLAP OR SNAP TO WAKE J.A.R.V.I.S.');
+      if (clapDetectorRef.current) {
+        clapDetectorRef.current.start();
+      }
+    }
+  }, []);
+
+  const startContinuousVoice = useCallback(() => {
+    setIsListening(true);
+    setStatusMessage('Hands-free voice matrix active. Standing by for commands, sir.');
+
+    if (speechRef.current) {
+      speechRef.current.startContinuousListening(
+        (finalTranscript) => {
+          setInterimTranscript('');
+          processVoiceCommand(finalTranscript);
+        },
+        (interim) => {
+          setInterimTranscript(interim);
+        },
+        (err) => {
+          console.log('Voice recognition update:', err);
+        }
+      );
+    }
+  }, []);
+
+  // Voice Command Pre-processor (Handles Standby & cleans wake phrases)
+  const processVoiceCommand = useCallback((rawTranscript) => {
+    if (!rawTranscript || !rawTranscript.trim()) return;
+    const trimmed = rawTranscript.trim();
+    const lower = trimmed.toLowerCase();
+
+    console.log('[VOICE INPUT RECEIVED]:', trimmed);
+
+    // 1. Check for sleep / standby command
+    if (
+      lower.includes('standby') ||
+      lower.includes('go to sleep') ||
+      lower.includes('sleep mode') ||
+      lower.includes('power down') ||
+      lower.includes('deactivate') ||
+      lower.includes('shut down')
+    ) {
+      handleSleep();
+      return;
+    }
+
+    // 2. Strip wake word prefixes if user said "Jarvis, open..." or "Hey Jarvis, launch..."
+    const cleanCommand = trimmed.replace(/^(hey\s+)?jarvis[,:\s]*/i, '').trim();
+    if (!cleanCommand) {
+      const reply = 'Yes, sir? Standing by for your directive.';
+      setStatusMessage(reply);
+      if (speechRef.current) speechRef.current.speak(reply);
+      return;
+    }
+
+    // 3. Process direct or AI command
+    processCommand(cleanCommand);
+  }, [handleSleep]);
+
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
+      if (!isAwakeRef.current) {
+        // Any space, enter, or 'w' wakes up Jarvis from dormant mode
+        if (e.code === 'Space' || e.key.toLowerCase() === 'w' || e.key === 'Enter') {
+          e.preventDefault();
+          triggerWakeup();
+        }
+        return;
+      }
+
+      // Awake Shortcuts
       if (e.code === 'Space') {
         e.preventDefault();
         toggleListening();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleSleep();
       } else if (e.key.toLowerCase() === 'd') {
         triggerDiagnosticScan();
       } else if (e.key.toLowerCase() === 'm') {
@@ -225,7 +399,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isListening, isMuted, activeSessionId, isBackendConnected]);
+  }, [triggerWakeup, handleSleep, isListening, isMuted, activeSessionId, isBackendConnected]);
 
   // Main Command / Message Processor (Connected to SQLite Backend)
   const processCommand = async (query) => {
@@ -268,7 +442,7 @@ export default function App() {
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, tempUserMsg]);
-      setStatusMessage(`Processing query: "${query}"...`);
+      setStatusMessage(`Processing directive: "${query}"...`);
 
       try {
         const response = await sendMessage(activeSessionId, query);
@@ -368,24 +542,11 @@ export default function App() {
     if (isListening) {
       setIsListening(false);
       if (speechRef.current) speechRef.current.stopListening();
-      setStatusMessage('Voice recognition suspended. Core in standby.');
+      setStatusMessage('Voice recognition paused. Core standing by.');
       soundFX.playClick();
     } else {
-      setIsListening(true);
-      setStatusMessage('Listening to audio input... Speak now, sir.');
+      startContinuousVoice();
       soundFX.playConfirm();
-
-      if (speechRef.current) {
-        speechRef.current.startListening(
-          (transcript) => {
-            setIsListening(false);
-            processCommand(transcript);
-          },
-          (err) => {
-            console.log('Voice recognition notification:', err);
-          }
-        );
-      }
     }
   };
 
@@ -397,6 +558,15 @@ export default function App() {
 
       {/* Laser diagnostic scanline sweep */}
       {isScanning && <div className="scan-line-sweep" />}
+
+      {/* Awakening & Dormant Standby Overlay */}
+      <WakeupOverlay
+        isAwake={isAwake}
+        isWakingUp={isWakingUp}
+        onTriggerWakeup={triggerWakeup}
+        micVolume={micVolume}
+        wakeStatusText={wakeStatusText}
+      />
 
       {/* Top Header */}
       <HudHeader
@@ -434,6 +604,49 @@ export default function App() {
           isBackendConnected={isBackendConnected}
         />
       </main>
+
+      {/* Hands-free Voice Floating Status Bar (When Awake) */}
+      {isAwake && (
+        <div className={`hud-voice-floating-bar ${isListening ? 'active' : ''}`}>
+          <div className="voice-status-pill">
+            {isJarvisSpeaking ? (
+              <>
+                <Volume2 size={14} className="speaking-icon" />
+                <span>SPEAKING</span>
+              </>
+            ) : isListening ? (
+              <>
+                <div className="voice-wave-animation">
+                  <span className="wave-bar" />
+                  <span className="wave-bar" />
+                  <span className="wave-bar" />
+                  <span className="wave-bar" />
+                </div>
+                <span>VOICE ACTIVE</span>
+              </>
+            ) : (
+              <>
+                <MicOff size={14} />
+                <span>VOICE PAUSED</span>
+              </>
+            )}
+          </div>
+
+          {interimTranscript && (
+            <div className="voice-transcript-snippet" title={interimTranscript}>
+              "{interimTranscript}"
+            </div>
+          )}
+
+          <button
+            className="voice-standby-btn"
+            onClick={handleSleep}
+            title="Put J.A.R.V.I.S. into Dormant Standby mode (clap to wake)"
+          >
+            STANDBY [ESC]
+          </button>
+        </div>
+      )}
 
       {/* Bottom Status Footer */}
       <HudFooter />

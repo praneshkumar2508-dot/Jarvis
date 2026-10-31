@@ -138,6 +138,77 @@ class SoundFX {
       osc.stop(t + 0.7);
     } catch {}
   }
+
+  playWakeup() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      // 1. Heavy electromagnetic core sub-bass surge
+      const sub = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(55, t);
+      sub.frequency.exponentialRampToValueAtTime(220, t + 0.5);
+      subGain.gain.setValueAtTime(0.2, t);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      sub.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      sub.start(t);
+      sub.stop(t + 0.6);
+
+      // 2. Rising plasma flare
+      const flare = this.ctx.createOscillator();
+      const flareGain = this.ctx.createGain();
+      flare.type = 'sawtooth';
+      flare.frequency.setValueAtTime(220, t + 0.1);
+      flare.frequency.exponentialRampToValueAtTime(1800, t + 0.7);
+      flareGain.gain.setValueAtTime(0.001, t);
+      flareGain.gain.linearRampToValueAtTime(0.09, t + 0.4);
+      flareGain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+      flare.connect(flareGain);
+      flareGain.connect(this.ctx.destination);
+      flare.start(t + 0.1);
+      flare.stop(t + 0.85);
+
+      // 3. Mark VII Quad-Harmonic Activation Chime
+      const freqs = [587.33, 880, 1174.66, 1760]; // D5, A5, D6, A6
+      freqs.forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const start = t + 0.45 + idx * 0.08;
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.08, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.4);
+      });
+    } catch {}
+  }
+
+  playPowerDown() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, t);
+      osc.frequency.exponentialRampToValueAtTime(80, t + 0.6);
+      gain.gain.setValueAtTime(0.1, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.6);
+    } catch {}
+  }
 }
 
 export const soundFX = new SoundFX();

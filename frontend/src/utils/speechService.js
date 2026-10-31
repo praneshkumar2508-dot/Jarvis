@@ -1,5 +1,4 @@
-// Speech Recognition and Speech Synthesis Service for Jarvis HUD
-
+// Speech Recognition & English Vocal Synthesis Service for J.A.R.V.I.S. HUD
 export class JarvisSpeech {
   constructor(onSpeechStart, onSpeechEnd) {
     this.recognition = null;
@@ -7,6 +6,13 @@ export class JarvisSpeech {
     this.onSpeechStart = onSpeechStart;
     this.onSpeechEnd = onSpeechEnd;
     this.ttsEnabled = true;
+
+    // Continuous voice recognition state
+    this.isContinuous = false;
+    this.isSpeaking = false;
+    this.onFinalCallback = null;
+    this.onInterimCallback = null;
+    this.onErrorCallback = null;
 
     this.initRecognition();
   }
@@ -18,39 +24,71 @@ export class JarvisSpeech {
     if (SpeechRec) {
       try {
         this.recognition = new SpeechRec();
-        this.recognition.continuous = false;
-        this.recognition.interimResults = false;
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
         this.recognition.lang = 'en-US';
+
+        this.recognition.onresult = (event) => {
+          let interimTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const item = event.results[i];
+            const transcript = item[0].transcript;
+            if (item.isFinal) {
+              const cleaned = transcript.trim();
+              if (cleaned && this.onFinalCallback) {
+                this.onFinalCallback(cleaned);
+              }
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          if (this.onInterimCallback && interimTranscript) {
+            this.onInterimCallback(interimTranscript.trim());
+          }
+        };
+
+        this.recognition.onerror = (err) => {
+          // 'no-speech' is normal when user is quiet in continuous mode
+          if (err.error === 'no-speech') return;
+          console.warn('Speech recognition warning:', err.error);
+          if (this.onErrorCallback) this.onErrorCallback(err.error);
+        };
+
+        this.recognition.onend = () => {
+          // Auto-restart continuous listening unless Jarvis is speaking or user stopped it
+          if (this.isContinuous && !this.isSpeaking) {
+            try {
+              this.recognition.start();
+            } catch {
+              // Ignore restart error
+            }
+          }
+        };
       } catch (err) {
         console.warn('SpeechRecognition initialization error:', err);
       }
     }
   }
 
-  startListening(onResult, onError) {
+  startContinuousListening(onFinal, onInterim, onError) {
+    this.isContinuous = true;
+    this.onFinalCallback = onFinal;
+    this.onInterimCallback = onInterim;
+    this.onErrorCallback = onError;
+
     if (!this.recognition) {
-      if (onError) onError('Speech recognition not supported in this browser environment.');
-      return;
+      this.initRecognition();
     }
 
-    this.recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      if (onResult) onResult(transcript);
-    };
-
-    this.recognition.onerror = (err) => {
-      console.warn('Speech recognition event error:', err);
-      if (onError) onError(err.error);
-    };
-
-    try {
-      this.recognition.start();
-    } catch {
-      // If already started, ignore
+    if (this.recognition && !this.isSpeaking) {
+      try {
+        this.recognition.start();
+      } catch {}
     }
   }
 
   stopListening() {
+    this.isContinuous = false;
     if (this.recognition) {
       try {
         this.recognition.stop();
@@ -58,16 +96,26 @@ export class JarvisSpeech {
     }
   }
 
-  speak(text) {
+  speak(text, onComplete) {
     if (!this.synth || !this.ttsEnabled) {
+      if (onComplete) onComplete();
       return;
     }
 
     try {
-      this.synth.cancel(); // Stop any pending utterance
+      this.isSpeaking = true;
+      this.synth.cancel(); // Stop any pending speech
+
+      // Temporarily pause recognition so Jarvis does not transcribe his own words
+      if (this.recognition) {
+        try {
+          this.recognition.stop();
+        } catch {}
+      }
+
       const utterance = new SpeechSynthesisUtterance(text);
 
-      // Select British/English male voice if available for authentic Jarvis voice
+      // Select British/English male voice for authentic Jarvis persona
       const voices = this.synth.getVoices();
       const jarvisVoice =
         voices.find(
@@ -94,21 +142,41 @@ export class JarvisSpeech {
       };
 
       utterance.onend = () => {
+        this.isSpeaking = false;
         if (this.onSpeechEnd) this.onSpeechEnd();
+        if (onComplete) onComplete();
+
+        // Resume continuous listening automatically
+        if (this.isContinuous && this.recognition) {
+          try {
+            this.recognition.start();
+          } catch {}
+        }
       };
 
       utterance.onerror = () => {
+        this.isSpeaking = false;
         if (this.onSpeechEnd) this.onSpeechEnd();
+        if (onComplete) onComplete();
+
+        if (this.isContinuous && this.recognition) {
+          try {
+            this.recognition.start();
+          } catch {}
+        }
       };
 
       this.synth.speak(utterance);
     } catch (e) {
       console.warn('Speech synthesis error:', e);
+      this.isSpeaking = false;
       if (this.onSpeechEnd) this.onSpeechEnd();
+      if (onComplete) onComplete();
     }
   }
 
   stopSpeaking() {
+    this.isSpeaking = false;
     if (this.synth) {
       this.synth.cancel();
       if (this.onSpeechEnd) this.onSpeechEnd();
