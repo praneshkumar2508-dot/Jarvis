@@ -12,11 +12,36 @@ os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 # -------------------------------------------------------------
 # 1. APPLICATION & WEBSITE LAUNCHER
 # -------------------------------------------------------------
+LAST_CLIENT_ACTION = None
+
+def get_and_clear_client_action() -> Optional[dict]:
+    """Retrieve and clear pending client action (e.g. open browser URL in frontend)."""
+    global LAST_CLIENT_ACTION
+    action = LAST_CLIENT_ACTION
+    LAST_CLIENT_ACTION = None
+    return action
+
+def get_browser_executable() -> Optional[str]:
+    """Detect available Chrome or Edge browser executables on Windows."""
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
 def open_website(url_or_name: str) -> str:
     """
-    Open any website or web URL in the user's default web browser.
+    Open any website or web URL in the user's web browser.
     Example: 'youtube', 'https://www.youtube.com', 'google', 'github', 'reddit'.
     """
+    global LAST_CLIENT_ACTION
     cleaned = url_or_name.lower().strip()
     url_map = {
         "youtube": "https://www.youtube.com",
@@ -26,6 +51,10 @@ def open_website(url_or_name: str) -> str:
         "twitter": "https://x.com",
         "x": "https://x.com",
         "netflix": "https://www.netflix.com",
+        "spotify": "https://open.spotify.com",
+        "gmail": "https://mail.google.com",
+        "amazon": "https://www.amazon.com",
+        "chatgpt": "https://chatgpt.com",
     }
 
     target_url = url_map.get(cleaned)
@@ -37,11 +66,40 @@ def open_website(url_or_name: str) -> str:
         else:
             target_url = f"https://www.google.com/search?q={cleaned}"
 
+    # Register client action for frontend tab opening
+    LAST_CLIENT_ACTION = {"type": "open_url", "url": target_url}
+
+    # Physical OS-level execution:
+    # 1. Direct browser executable launch (Chrome / Edge)
+    browser_exe = get_browser_executable()
+    if browser_exe:
+        try:
+            subprocess.Popen([browser_exe, target_url])
+        except Exception:
+            pass
+
+    # 2. PowerShell Start-Process (launches default protocol handler)
     try:
-        webbrowser.open(target_url)
-        return f"Accessing {url_or_name} in your default browser, sir."
-    except Exception as e:
-        return f"Unable to open website: {str(e)}"
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-Command", f"Start-Process '{target_url}'"],
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+        )
+    except Exception:
+        pass
+
+    # 3. Windows Shell start
+    try:
+        subprocess.Popen(f'cmd.exe /c start "" "{target_url}"', shell=True)
+    except Exception:
+        pass
+
+    # 4. Standard Python webbrowser fallback
+    try:
+        webbrowser.open_new_tab(target_url)
+    except Exception:
+        pass
+
+    return f"Accessing {url_or_name} in your browser now, sir."
 
 
 def launch_application(app_name: str) -> str:
@@ -55,37 +113,76 @@ def launch_application(app_name: str) -> str:
     if any(site in cleaned for site in ["youtube", "google", "github", "reddit", "netflix", ".com", "http"]):
         return open_website(cleaned)
 
-    # Desktop apps
+    # Desktop apps:
+    # Visual Studio Code
     if any(k in cleaned for k in ["vscode", "vs code", "code"]):
+        code_candidates = [
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"),
+            r"C:\Program Files\Microsoft VS Code\Code.exe",
+            r"C:\Program Files (x86)\Microsoft VS Code\Code.exe",
+        ]
+        for p in code_candidates:
+            if os.path.exists(p):
+                subprocess.Popen([p])
+                return "Visual Studio Code is now launching on your desktop, sir."
         subprocess.Popen("code", shell=True)
         return "Visual Studio Code is now launching on your desktop, sir."
-    elif any(k in cleaned for k in ["notepad", "text editor"]):
-        subprocess.Popen("notepad", shell=True)
-        return "Notepad has been opened, sir."
-    elif any(k in cleaned for k in ["calculator", "calc"]):
-        subprocess.Popen("calc", shell=True)
-        return "Calculator has been launched, sir."
+
+    # Google Chrome
     elif any(k in cleaned for k in ["chrome", "browser"]):
-        subprocess.Popen("start chrome", shell=True)
+        chrome_exe = get_browser_executable()
+        if chrome_exe:
+            subprocess.Popen([chrome_exe])
+            return "Google Chrome has been opened, sir."
+        subprocess.Popen("cmd.exe /c start chrome", shell=True)
         return "Google Chrome has been opened, sir."
+
+    # Notepad
+    elif any(k in cleaned for k in ["notepad", "text editor"]):
+        subprocess.Popen(["notepad.exe"])
+        return "Notepad has been opened, sir."
+
+    # Calculator
+    elif any(k in cleaned for k in ["calculator", "calc"]):
+        subprocess.Popen(["calc.exe"])
+        return "Calculator has been launched, sir."
+
+    # Spotify
     elif "spotify" in cleaned:
-        subprocess.Popen("start spotify:", shell=True)
+        spotify_candidates = [
+            os.path.expandvars(r"%APPDATA%\Spotify\Spotify.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\Spotify.exe"),
+        ]
+        for p in spotify_candidates:
+            if os.path.exists(p):
+                subprocess.Popen([p])
+                return "Spotify has been launched, sir."
+        subprocess.Popen("cmd.exe /c start spotify:", shell=True)
         return "Spotify has been launched, sir."
+
+    # File Explorer
     elif any(k in cleaned for k in ["explorer", "files", "folder"]):
-        subprocess.Popen("explorer", shell=True)
+        subprocess.Popen(["explorer.exe"])
         return "File Explorer has been opened, sir."
+
+    # Terminal
     elif any(k in cleaned for k in ["terminal", "cmd", "powershell"]):
         subprocess.Popen("start wt || start powershell || start cmd", shell=True)
         return "Terminal console has been opened, sir."
+
+    # Paint
     elif "paint" in cleaned:
-        subprocess.Popen("mspaint", shell=True)
+        subprocess.Popen(["mspaint.exe"])
         return "Paint has been opened, sir."
+
+    # Task Manager
     elif "taskmgr" in cleaned or "task manager" in cleaned:
-        subprocess.Popen("taskmgr", shell=True)
+        subprocess.Popen(["taskmgr.exe"])
         return "Task Manager has been opened, sir."
+
     else:
         try:
-            subprocess.Popen(f"start {cleaned}", shell=True)
+            subprocess.Popen(f'cmd.exe /c start "" "{cleaned}"', shell=True)
             return f"Executing {app_name} on your desktop, sir."
         except Exception as e:
             return f"Failed to launch {app_name}: {str(e)}"

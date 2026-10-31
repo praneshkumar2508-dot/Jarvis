@@ -231,6 +231,34 @@ export default function App() {
   const processCommand = async (query) => {
     if (!query.trim()) return;
 
+    // 1. Proactive user-gesture browser opener (bypasses browser popup blocker policies)
+    const qLower = query.toLowerCase().trim();
+    const webIntentMap = {
+      youtube: 'https://www.youtube.com',
+      google: 'https://www.google.com',
+      github: 'https://www.github.com',
+      reddit: 'https://www.reddit.com',
+      netflix: 'https://www.netflix.com',
+      spotify: 'https://open.spotify.com',
+      gmail: 'https://mail.google.com',
+    };
+
+    let openedInBrowser = false;
+    for (const [key, targetUrl] of Object.entries(webIntentMap)) {
+      if (
+        qLower.includes(key) &&
+        (qLower.startsWith('open') || qLower.startsWith('launch') || qLower.startsWith('go to') || qLower.startsWith('visit'))
+      ) {
+        try {
+          window.open(targetUrl, '_blank');
+          openedInBrowser = true;
+        } catch (e) {
+          console.warn('Popup blocked:', e);
+        }
+        break;
+      }
+    }
+
     if (isBackendConnected && activeSessionId && !activeSessionId.startsWith('local-')) {
       // Optimistically append user message immediately to feed
       const tempUserMsg = {
@@ -245,6 +273,15 @@ export default function App() {
       try {
         const response = await sendMessage(activeSessionId, query);
         const jarvisText = response.jarvis_message.text;
+
+        // If backend provided an active client action (e.g. open website) and not yet opened
+        if (response.action && response.action.type === 'open_url' && !openedInBrowser) {
+          try {
+            window.open(response.action.url, '_blank');
+          } catch (err) {
+            console.warn('Browser popup blocked:', err);
+          }
+        }
 
         // Replace optimistic message and append persisted messages
         setMessages((prev) => [

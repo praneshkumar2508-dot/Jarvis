@@ -8,6 +8,7 @@ from sqlalchemy import desc
 from database import engine, Base, get_db
 import models
 import schemas
+import system_tools
 from services import JarvisAIService
 
 # Initialize tables
@@ -127,6 +128,7 @@ def send_message(session_id: str, payload: schemas.ChatQueryRequest, db: Session
 
     # 2. Generate Jarvis AI response with multi-turn history
     jarvis_reply_text = JarvisAIService.process_query(payload.query, history=session_obj.messages)
+    client_action = system_tools.get_and_clear_client_action()
 
     # 3. Save Jarvis Message
     jarvis_msg = models.ChatMessage(
@@ -147,7 +149,8 @@ def send_message(session_id: str, payload: schemas.ChatQueryRequest, db: Session
     return schemas.ChatQueryResponse(
         user_message=schemas.MessageOut.from_orm(user_msg),
         jarvis_message=schemas.MessageOut.from_orm(jarvis_msg),
-        session_id=session_id
+        session_id=session_id,
+        action=client_action
     )
 
 if __name__ == "__main__":

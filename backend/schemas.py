@@ -47,3 +47,4 @@ class ChatQueryResponse(BaseModel):
     user_message: MessageOut
     jarvis_message: MessageOut
     session_id: str
+    action: Optional[dict] = None
