@@ -33,10 +33,13 @@ JARVIS_TOOLS = [
     system_tools.search_web,
 ]
 
-# High-quota free tier models
+# Ultra-stable high-throughput production models (verified active with tools)
 CANDIDATE_MODELS = [
-    "gemini-3.1-flash-lite-preview", # High quota, next-gen preview
-    "gemini-2.5-flash-lite",         # High quota, super fast
+    "gemini-flash-lite-latest",      # High quota, verified active and responsive
+    "gemini-3.5-flash-lite",         # High quota, verified active and responsive
+    "gemini-flash-latest",           # Production fallback
+    "gemini-3.1-flash-lite",         # Fallback
+    "gemini-3.1-flash-lite-preview", # Fallback preview
 ]
 
 class JarvisAIService:
@@ -140,10 +143,18 @@ class JarvisAIService:
                         continue
 
                 if last_error:
-                    return f"My neural link encountered an anomaly: {str(last_error)}. Standing by, sir."
+                    err_str = str(last_error)
+                    if "503" in err_str or "UNAVAILABLE" in err_str:
+                        return "The cloud neural matrix is currently undergoing a high-demand traffic surge (503). Auxiliary systems remain armed, Sir. Please re-issue your directive in just a moment."
+                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                        return "The current API key tier quota limit has been met (429). Standing by, Sir."
+                    return f"My neural link encountered an anomaly: {err_str}. Standing by, sir."
 
             except Exception as e:
-                return f"My neural link encountered an anomaly: {str(e)}. Standing by, sir."
+                err_str = str(e)
+                if "503" in err_str or "UNAVAILABLE" in err_str:
+                    return "The cloud neural matrix is currently undergoing a high-demand traffic surge (503). Auxiliary systems remain armed, Sir. Please re-issue your directive in just a moment."
+                return f"My neural link encountered an anomaly: {err_str}. Standing by, sir."
 
         # Offline fallback if API key is missing
         now = datetime.now()
