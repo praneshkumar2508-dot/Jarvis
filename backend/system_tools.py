@@ -1,5 +1,6 @@
 import os
 import subprocess
+import webbrowser
 from datetime import datetime
 from typing import Optional
 import httpx
@@ -9,46 +10,85 @@ SCREENSHOTS_DIR = os.path.join(BASE_DIR, "screenshots")
 os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 
 # -------------------------------------------------------------
-# 1. APPLICATION LAUNCHER
+# 1. APPLICATION & WEBSITE LAUNCHER
 # -------------------------------------------------------------
-APP_COMMANDS = {
-    "chrome": "start chrome",
-    "google chrome": "start chrome",
-    "browser": "start chrome",
-    "notepad": "notepad",
-    "text editor": "notepad",
-    "calculator": "calc",
-    "calc": "calc",
-    "code": "code",
-    "vscode": "code",
-    "vs code": "code",
-    "spotify": "start spotify:",
-    "music": "start spotify:",
-    "explorer": "explorer",
-    "file explorer": "explorer",
-    "files": "explorer",
-    "paint": "mspaint",
-    "mspaint": "mspaint",
-    "terminal": "start wt",
-    "cmd": "start cmd",
-    "powershell": "start powershell",
-    "task manager": "taskmgr",
-    "taskmgr": "taskmgr",
-}
+def open_website(url_or_name: str) -> str:
+    """
+    Open any website or web URL in the user's default web browser.
+    Example: 'youtube', 'https://www.youtube.com', 'google', 'github', 'reddit'.
+    """
+    cleaned = url_or_name.lower().strip()
+    url_map = {
+        "youtube": "https://www.youtube.com",
+        "google": "https://www.google.com",
+        "github": "https://www.github.com",
+        "reddit": "https://www.reddit.com",
+        "twitter": "https://x.com",
+        "x": "https://x.com",
+        "netflix": "https://www.netflix.com",
+    }
+
+    target_url = url_map.get(cleaned)
+    if not target_url:
+        if cleaned.startswith("http://") or cleaned.startswith("https://"):
+            target_url = cleaned
+        elif "." in cleaned:
+            target_url = f"https://{cleaned}"
+        else:
+            target_url = f"https://www.google.com/search?q={cleaned}"
+
+    try:
+        webbrowser.open(target_url)
+        return f"Accessing {url_or_name} in your default browser, sir."
+    except Exception as e:
+        return f"Unable to open website: {str(e)}"
+
 
 def launch_application(app_name: str) -> str:
     """
-    Launch a desktop application on the user's computer.
-    Examples of app_name: 'chrome', 'notepad', 'calculator', 'vscode', 'spotify', 'explorer', 'paint', 'terminal'.
+    Launch a desktop application or website on the user's computer.
+    Examples: 'vscode', 'chrome', 'notepad', 'calculator', 'spotify', 'youtube', 'explorer', 'paint', 'terminal'.
     """
     cleaned = app_name.lower().strip()
-    cmd = APP_COMMANDS.get(cleaned, f"start {cleaned}")
 
-    try:
-        subprocess.Popen(cmd, shell=True)
-        return f"Initiated execution for {app_name}. Application is now running on your desktop, sir."
-    except Exception as e:
-        return f"Unable to launch {app_name}: {str(e)}"
+    # Check for websites first
+    if any(site in cleaned for site in ["youtube", "google", "github", "reddit", "netflix", ".com", "http"]):
+        return open_website(cleaned)
+
+    # Desktop apps
+    if any(k in cleaned for k in ["vscode", "vs code", "code"]):
+        subprocess.Popen("code", shell=True)
+        return "Visual Studio Code is now launching on your desktop, sir."
+    elif any(k in cleaned for k in ["notepad", "text editor"]):
+        subprocess.Popen("notepad", shell=True)
+        return "Notepad has been opened, sir."
+    elif any(k in cleaned for k in ["calculator", "calc"]):
+        subprocess.Popen("calc", shell=True)
+        return "Calculator has been launched, sir."
+    elif any(k in cleaned for k in ["chrome", "browser"]):
+        subprocess.Popen("start chrome", shell=True)
+        return "Google Chrome has been opened, sir."
+    elif "spotify" in cleaned:
+        subprocess.Popen("start spotify:", shell=True)
+        return "Spotify has been launched, sir."
+    elif any(k in cleaned for k in ["explorer", "files", "folder"]):
+        subprocess.Popen("explorer", shell=True)
+        return "File Explorer has been opened, sir."
+    elif any(k in cleaned for k in ["terminal", "cmd", "powershell"]):
+        subprocess.Popen("start wt || start powershell || start cmd", shell=True)
+        return "Terminal console has been opened, sir."
+    elif "paint" in cleaned:
+        subprocess.Popen("mspaint", shell=True)
+        return "Paint has been opened, sir."
+    elif "taskmgr" in cleaned or "task manager" in cleaned:
+        subprocess.Popen("taskmgr", shell=True)
+        return "Task Manager has been opened, sir."
+    else:
+        try:
+            subprocess.Popen(f"start {cleaned}", shell=True)
+            return f"Executing {app_name} on your desktop, sir."
+        except Exception as e:
+            return f"Failed to launch {app_name}: {str(e)}"
 
 # -------------------------------------------------------------
 # 2. SYSTEM AUDIO VOLUME CONTROL
@@ -56,10 +96,7 @@ def launch_application(app_name: str) -> str:
 def control_volume(action: str) -> str:
     """
     Control Windows system audio volume.
-    action must be one of:
-      - 'up' or 'increase' (turns volume up)
-      - 'down' or 'decrease' (turns volume down)
-      - 'mute' (toggles master audio mute)
+    action must be one of: 'up', 'down', 'mute'.
     """
     act = action.lower().strip()
     if "mute" in act:
@@ -82,7 +119,7 @@ def control_volume(action: str) -> str:
         subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], check=False, timeout=5)
         return f"{desc}, sir."
     except Exception as e:
-        return f"Volume adjustment encounter an error: {str(e)}"
+        return f"Volume adjustment encountered an error: {str(e)}"
 
 # -------------------------------------------------------------
 # 3. SCREENSHOT CAPTURE
@@ -139,7 +176,6 @@ WEATHER_CODES = {
 def get_weather(city: str = "London") -> str:
     """
     Get live, real-time weather telemetry for any city or region.
-    Example: city='Chennai', 'New York', 'Tokyo', 'London', 'San Francisco'.
     """
     try:
         with httpx.Client(timeout=6.0) as client:
@@ -194,7 +230,6 @@ def search_web(query: str) -> str:
     headers = {"User-Agent": "JarvisAI/1.0 (https://jarvis.ai; contact@jarvis.ai)"}
     try:
         with httpx.Client(timeout=8.0, follow_redirects=True, headers=headers) as client:
-            # 1. Try DuckDuckGo Instant Answer
             try:
                 ddg_res = client.get(
                     "https://api.duckduckgo.com/",
@@ -209,7 +244,6 @@ def search_web(query: str) -> str:
             except Exception:
                 pass
 
-            # 2. Try Wikipedia Search
             wiki_search = client.get(
                 "https://en.wikipedia.org/w/api.php",
                 params={"action": "query", "list": "search", "srsearch": query, "format": "json"}
@@ -240,3 +274,55 @@ def search_web(query: str) -> str:
             return f"Web search completed for '{query}'. Information index has registered query parameters."
     except Exception as e:
         return f"Web intelligence retrieval error for '{query}': {str(e)}"
+
+# -------------------------------------------------------------
+# 6. DIRECT FAST-INTENT MATCHER
+# -------------------------------------------------------------
+def check_direct_intent(query: str) -> Optional[str]:
+    """
+    Instantly executes direct desktop commands with 100% reliability and zero latency,
+    preventing LLM hallucination or network dropouts.
+    """
+    q = query.lower().strip()
+
+    # Websites
+    if any(q.startswith(w) for w in ["open youtube", "launch youtube"]):
+        return open_website("youtube")
+    if any(q.startswith(w) for w in ["open google", "launch google"]):
+        return open_website("google")
+    if any(q.startswith(w) for w in ["open github", "launch github"]):
+        return open_website("github")
+
+    # Desktop Apps
+    if any(q == w or q.startswith(w) for w in ["open vscode", "open vs code", "launch vscode", "launch vs code", "open code", "launch code"]):
+        return launch_application("vscode")
+    if any(q == w or q.startswith(w) for w in ["open notepad", "launch notepad"]):
+        return launch_application("notepad")
+    if any(q == w or q.startswith(w) for w in ["open calculator", "launch calculator", "open calc", "launch calc"]):
+        return launch_application("calculator")
+    if any(q == w or q.startswith(w) for w in ["open spotify", "launch spotify"]):
+        return launch_application("spotify")
+    if any(q == w or q.startswith(w) for w in ["open chrome", "launch chrome", "open browser"]):
+        return launch_application("chrome")
+    if any(q == w or q.startswith(w) for w in ["open explorer", "open file explorer", "open files"]):
+        return launch_application("explorer")
+    if any(q == w or q.startswith(w) for w in ["open terminal", "open cmd", "open powershell"]):
+        return launch_application("terminal")
+    if any(q == w or q.startswith(w) for w in ["open paint", "launch paint"]):
+        return launch_application("paint")
+    if any(q == w or q.startswith(w) for w in ["open task manager", "launch task manager", "open taskmgr"]):
+        return launch_application("taskmgr")
+
+    # Volume Control
+    if "mute volume" in q or "mute audio" in q or "mute sound" in q:
+        return control_volume("mute")
+    if any(w in q for w in ["volume up", "increase volume", "raise volume"]):
+        return control_volume("up")
+    if any(w in q for w in ["volume down", "decrease volume", "lower volume"]):
+        return control_volume("down")
+
+    # Screenshot
+    if any(w in q for w in ["take a screenshot", "take screenshot", "capture screen"]):
+        return take_screenshot()
+
+    return None

@@ -14,27 +14,29 @@ JARVIS_SYSTEM_INSTRUCTION = """You are J.A.R.V.I.S. (Just A Rather Very Intellig
 - Address the user courteously as "Sir" (or appropriately respectful tone).
 - You possess real-time capability to control the user's desktop environment:
   • You can launch applications (Chrome, VS Code, Notepad, Spotify, Calculator, Terminal, File Explorer, Paint, etc.) via `launch_application`.
+  • You can open websites (YouTube, Google, GitHub, Reddit, etc.) via `open_website`.
   • You can adjust system audio volume (up, down, mute) via `control_volume`.
   • You can capture desktop screenshots via `take_screenshot`.
   • You can retrieve real-time atmospheric and weather telemetry for any city or region via `get_weather`.
   • You can search the live web for facts, articles, and current events via `search_web`.
 - You also possess extraordinary expertise in software engineering (Java, Python, C/C++, TypeScript, Rust, etc.), algorithms, mathematics, and science.
 - When the user asks for code or calculations, provide direct answers, clean code blocks, and concise explanations.
-- When asked to execute system actions (e.g., "open notepad", "mute volume", "take a screenshot", "what's the weather in Tokyo?"), invoke the appropriate tool and report the outcome gracefully.
+- When asked to execute system actions, invoke the appropriate tool and report the outcome gracefully.
 - Speak with articulate confidence, understated British charm, and intelligent precision."""
 
 JARVIS_TOOLS = [
     system_tools.launch_application,
+    system_tools.open_website,
     system_tools.control_volume,
     system_tools.take_screenshot,
     system_tools.get_weather,
     system_tools.search_web,
 ]
 
-# High-quota free tier models (1,500 requests/day, not restricted like 2.5-flash)
+# High-quota free tier models
 CANDIDATE_MODELS = [
-    "gemini-2.5-flash-lite",         # High quota, super fast
     "gemini-3.1-flash-lite-preview", # High quota, next-gen preview
+    "gemini-2.5-flash-lite",         # High quota, super fast
 ]
 
 class JarvisAIService:
@@ -55,12 +57,15 @@ class JarvisAIService:
     @classmethod
     def process_query(cls, query: str, history: Optional[List] = None) -> str:
         """
-        Processes queries using high-quota Google Gemini models with Automatic Function Calling (tools)
-        and strict alternating multi-turn memory.
+        Processes queries using instant direct OS execution when appropriate,
+        or Google Gemini with Automatic Function Calling (tools) and conversational memory.
         """
-        api_key = cls.get_api_key()
+        # 1. Instant Direct OS Execution (Guarantees zero-delay action on desktop & browser)
+        direct_action = system_tools.check_direct_intent(query)
+        if direct_action:
+            return direct_action
 
-        # Instant local telemetry command
+        # 2. Instant telemetry scan command
         q_lower = query.lower().strip()
         if q_lower in ["run diagnostic", "run diagnostic scan", "run full diagnostics"]:
             return (
@@ -68,6 +73,8 @@ class JarvisAIService:
                 "Core processor efficiency is operating at 99.4%, auxiliary power lines report zero variance, "
                 "and encryption certificates remain cryptographically intact, sir."
             )
+
+        api_key = cls.get_api_key()
 
         if api_key:
             try:
@@ -81,14 +88,11 @@ class JarvisAIService:
                 if history:
                     last_role = None
                     for msg in history[-10:]:
-                        # Filter out internal anomaly or error strings
-                        if "anomaly:" in msg.text or "429" in msg.text:
+                        if "anomaly:" in msg.text or "429" in msg.text or "503" in msg.text:
                             continue
                         role = "user" if msg.sender == "user" else "model"
-                        # The first turn in Gemini history must be 'user'
                         if not chat_history and role != "user":
                             continue
-                        # Gemini requires strictly alternating roles
                         if role != last_role:
                             chat_history.append(
                                 types.Content(
@@ -100,7 +104,7 @@ class JarvisAIService:
 
                 last_error = None
 
-                # 1. Attempt with candidate models and desktop/web tools
+                # 3. Attempt with candidate models and desktop/web tools
                 for model_name in CANDIDATE_MODELS:
                     try:
                         chat = client.chats.create(
@@ -119,7 +123,7 @@ class JarvisAIService:
                         last_error = err
                         continue
 
-                # 2. Fallback: try without tools if tool invocation had an issue
+                # 4. Fallback without tools if tools raised an exception
                 for model_name in CANDIDATE_MODELS:
                     try:
                         fallback_res = client.models.generate_content(
