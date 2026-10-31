@@ -6,6 +6,14 @@ import CommandLogPanel from './components/CommandLogPanel';
 import HudFooter from './components/HudFooter';
 import { soundFX } from './utils/audioEffects';
 import { JarvisSpeech } from './utils/speechService';
+import {
+  checkBackendHealth,
+  fetchSessions,
+  createSession,
+  fetchSessionDetails,
+  deleteSession,
+  sendMessage,
+} from './utils/api';
 
 export default function App() {
   const [currentTheme, setCurrentTheme] = useState('cyan');
@@ -14,28 +22,19 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [isJarvisSpeaking, setIsJarvisSpeaking] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+
+  // Chat sessions state
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [statusMessage, setStatusMessage] = useState(
     'Neural Interface online. All systems nominal. Standing by, sir.'
   );
 
-  const [messages, setMessages] = useState([
-    {
-      id: 'init-1',
-      sender: 'jarvis',
-      time: '14:00:01',
-      text: 'Good day, sir. J.A.R.V.I.S. Mark VII is fully loaded and standing by for your command.',
-    },
-    {
-      id: 'init-2',
-      sender: 'jarvis',
-      time: '14:00:03',
-      text: 'Arc Reactor core is calibrated at 98% nominal output. Audio telemetry matrix active.',
-    },
-  ]);
-
   const speechRef = useRef(null);
 
-  // Initialize Speech System
+  // 1. Initialize Speech System & Boot Audio
   useEffect(() => {
     speechRef.current = new JarvisSpeech(
       () => setIsJarvisSpeaking(true),
@@ -43,7 +42,6 @@ export default function App() {
     );
     speechRef.current.ttsEnabled = ttsEnabled;
 
-    // Initial boot sound
     const bootTimer = setTimeout(() => {
       soundFX.playBoot();
     }, 600);
@@ -54,7 +52,72 @@ export default function App() {
     };
   }, []);
 
-  // Sync theme to root DOM
+  // 2. Initialize Backend Connection & Load Saved Sessions from Database
+  useEffect(() => {
+    async function initDatabase() {
+      const isHealthy = await checkBackendHealth();
+      setIsBackendConnected(isHealthy);
+
+      if (isHealthy) {
+        try {
+          const list = await fetchSessions();
+          setSessions(list);
+
+          if (list.length > 0) {
+            // Select the most recent session
+            const mostRecent = list[0];
+            setActiveSessionId(mostRecent.id);
+            const detail = await fetchSessionDetails(mostRecent.id);
+            setMessages(detail.messages || []);
+          } else {
+            // Create initial session in database
+            const newSession = await createSession('Primary Neural Session');
+            setSessions([newSession]);
+            setActiveSessionId(newSession.id);
+            setMessages(newSession.messages || []);
+          }
+        } catch (err) {
+          console.warn('Error loading initial session from database:', err);
+          initFallbackSession();
+        }
+      } else {
+        initFallbackSession();
+      }
+    }
+
+    initDatabase();
+  }, []);
+
+  // Local fallback session if backend is initializing or offline
+  const initFallbackSession = () => {
+    const fallbackId = 'local-session-1';
+    setActiveSessionId(fallbackId);
+    setSessions([
+      {
+        id: fallbackId,
+        title: 'Primary Neural Session',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        message_count: 2,
+      },
+    ]);
+    setMessages([
+      {
+        id: 1,
+        sender: 'jarvis',
+        created_at: new Date().toISOString(),
+        text: 'Good day, sir. J.A.R.V.I.S. Mark VII is fully loaded and standing by for your command.',
+      },
+      {
+        id: 2,
+        sender: 'jarvis',
+        created_at: new Date().toISOString(),
+        text: 'Arc Reactor core is calibrated at 98% nominal output. Audio telemetry matrix active.',
+      },
+    ]);
+  };
+
+  // Sync theme attribute to <html> root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', currentTheme);
   }, [currentTheme]);
@@ -66,17 +129,88 @@ export default function App() {
     }
   }, [ttsEnabled]);
 
-  // Sync Mute toggle
+  // Handle Mute toggle
   const handleToggleMute = () => {
     const next = !isMuted;
     setIsMuted(next);
     soundFX.setMuted(next);
   };
 
+  // Switch to selected session from history
+  const handleSelectSession = async (sessionId) => {
+    setActiveSessionId(sessionId);
+    if (isBackendConnected) {
+      try {
+        const detail = await fetchSessionDetails(sessionId);
+        setMessages(detail.messages || []);
+        setStatusMessage(`Loaded session "${detail.title}". Standing by.`);
+      } catch (err) {
+        console.error('Failed to load session details:', err);
+      }
+    }
+  };
+
+  // Create a brand New Chat session in database
+  const handleNewChat = async () => {
+    if (isBackendConnected) {
+      try {
+        const newSession = await createSession('New Neural Session');
+        setSessions((prev) => [newSession, ...prev]);
+        setActiveSessionId(newSession.id);
+        setMessages(newSession.messages || []);
+        const reply = 'New neural session initiated, sir. All parameters cleared for new directives.';
+        setStatusMessage(reply);
+        if (speechRef.current) speechRef.current.speak(reply);
+      } catch (err) {
+        console.error('Failed to create new session on backend:', err);
+      }
+    } else {
+      const newId = 'local-' + Date.now();
+      const localSession = {
+        id: newId,
+        title: 'New Neural Session',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        message_count: 1,
+      };
+      setSessions((prev) => [localSession, ...prev]);
+      setActiveSessionId(newId);
+      setMessages([
+        {
+          id: Date.now(),
+          sender: 'jarvis',
+          created_at: new Date().toISOString(),
+          text: 'New neural session initialized in local mode. Standing by, sir.',
+        },
+      ]);
+    }
+  };
+
+  // Delete a session
+  const handleDeleteSession = async (sessionId) => {
+    if (isBackendConnected) {
+      try {
+        await deleteSession(sessionId);
+      } catch (err) {
+        console.error('Failed to delete session:', err);
+      }
+    }
+
+    const remaining = sessions.filter((s) => s.id !== sessionId);
+    setSessions(remaining);
+
+    if (activeSessionId === sessionId) {
+      if (remaining.length > 0) {
+        handleSelectSession(remaining[0].id);
+      } else {
+        handleNewChat();
+      }
+    }
+  };
+
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if user is typing in an input
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
       if (e.code === 'Space') {
@@ -91,7 +225,77 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isListening, isMuted]);
+  }, [isListening, isMuted, activeSessionId, isBackendConnected]);
+
+  // Main Command / Message Processor (Connected to SQLite Backend)
+  const processCommand = async (query) => {
+    if (!query.trim()) return;
+
+    if (isBackendConnected && activeSessionId && !activeSessionId.startsWith('local-')) {
+      // Optimistically append user message immediately to feed
+      const tempUserMsg = {
+        id: 'temp-' + Date.now(),
+        sender: 'user',
+        text: query,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, tempUserMsg]);
+      setStatusMessage(`Processing query: "${query}"...`);
+
+      try {
+        const response = await sendMessage(activeSessionId, query);
+        const jarvisText = response.jarvis_message.text;
+
+        // Replace optimistic message and append persisted messages
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== tempUserMsg.id),
+          response.user_message,
+          response.jarvis_message,
+        ]);
+
+        setStatusMessage(jarvisText);
+
+        // Vocalize response via TTS
+        if (speechRef.current) {
+          speechRef.current.speak(jarvisText);
+        }
+
+        // Refresh sessions list to display updated title & timestamp
+        const updatedList = await fetchSessions();
+        setSessions(updatedList);
+      } catch (err) {
+        console.error('Failed to transmit message to backend:', err);
+        fallbackLocalProcess(query);
+      }
+    } else {
+      fallbackLocalProcess(query);
+    }
+  };
+
+  // Client-side fallback message processor
+  const fallbackLocalProcess = (query) => {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const userMsg = { id: Date.now() + '-user', sender: 'user', time, text: query };
+
+    const q = query.toLowerCase();
+    let reply = `Understood, sir. Directive regarding "${query}" has been processed.`;
+
+    if (q.includes('diagnostic') || q.includes('scan')) {
+      triggerDiagnosticScan();
+      return;
+    } else if (q.includes('status') || q.includes('how are you')) {
+      reply = 'All telemetry systems are fully operational, sir. Quantum defenses are active.';
+    } else if (q.includes('reactor') || q.includes('power')) {
+      reply = 'Arc Reactor operating at peak efficiency. Output delivering 3.2 gigajoules per second.';
+    } else if (q.includes('who are you') || q.includes('jarvis')) {
+      reply = 'I am J.A.R.V.I.S., your autonomous intelligent assistant.';
+    }
+
+    const jarvisMsg = { id: Date.now() + '-jarvis', sender: 'jarvis', time, text: reply };
+    setMessages((prev) => [...prev, userMsg, jarvisMsg]);
+    setStatusMessage(reply);
+    if (speechRef.current) speechRef.current.speak(reply);
+  };
 
   // Trigger diagnostic scan sweep
   const triggerDiagnosticScan = () => {
@@ -104,57 +308,22 @@ export default function App() {
       soundFX.playConfirm();
       const reply = 'Diagnostic complete. Core processors at 99.4% efficiency. Zero anomalies detected, sir.';
       setStatusMessage(reply);
-      addJarvisMessage(reply);
+
+      if (isBackendConnected && activeSessionId && !activeSessionId.startsWith('local-')) {
+        sendMessage(activeSessionId, 'System diagnostic report').then((res) => {
+          setMessages((prev) => [...prev, res.user_message, res.jarvis_message]);
+        }).catch(() => {});
+      } else {
+        const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+        setMessages((prev) => [
+          ...prev,
+          { id: Date.now() + '-u', sender: 'user', time, text: 'Run system diagnostic scan' },
+          { id: Date.now() + '-j', sender: 'jarvis', time, text: reply },
+        ]);
+      }
+
       if (speechRef.current) speechRef.current.speak(reply);
     }, 2400);
-  };
-
-  // Add a message to feed
-  const addUserMessage = (text) => {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    setMessages((prev) => [...prev, { id: Date.now() + '-user', sender: 'user', time, text }]);
-  };
-
-  const addJarvisMessage = (text) => {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    setMessages((prev) => [...prev, { id: Date.now() + '-jarvis', sender: 'jarvis', time, text }]);
-  };
-
-  // Intelligent Jarvis command processor
-  const processCommand = (query) => {
-    addUserMessage(query);
-    const q = query.toLowerCase().trim();
-
-    let reply = '';
-
-    if (q.includes('diagnostic') || q.includes('scan')) {
-      triggerDiagnosticScan();
-      return;
-    } else if (q.includes('status') || q.includes('how are you')) {
-      reply = 'All telemetry systems are fully operational, sir. Quantum defenses are active, and latency is under 15 milliseconds.';
-    } else if (q.includes('integrity') || q.includes('check')) {
-      reply = 'System integrity confirmed at 100%. Auxiliary batteries charged, and cloud neural mesh synchronized.';
-    } else if (q.includes('deploy') || q.includes('security') || q.includes('protocol')) {
-      reply = 'Level four security protocols engaged. Defensive perimeter energized and external ports sealed.';
-      soundFX.playAlert();
-    } else if (q.includes('reactor') || q.includes('power')) {
-      reply = 'Arc Reactor operating at peak efficiency. Output delivering 3.2 gigajoules per second to the neural bus.';
-    } else if (q.includes('who are you') || q.includes('jarvis')) {
-      reply = 'I am J.A.R.V.I.S., your autonomous intelligent assistant. I manage your neural workspace, telemetry, and audio workflows.';
-    } else if (q.includes('theme') || q.includes('color')) {
-      const themes = ['cyan', 'crimson', 'emerald', 'violet'];
-      const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
-      setCurrentTheme(nextTheme);
-      reply = `Color matrix re-routed to ${nextTheme.toUpperCase()} spectrum.`;
-    } else {
-      reply = `Understood, sir. Processing directive "${query}". Neural telemetry has registered your request.`;
-    }
-
-    setStatusMessage(reply);
-    addJarvisMessage(reply);
-    if (speechRef.current) {
-      speechRef.current.speak(reply);
-    }
   };
 
   // Toggle voice recognition & listening
@@ -176,8 +345,7 @@ export default function App() {
             processCommand(transcript);
           },
           (err) => {
-            console.log('Voice rec message:', err);
-            // Even if speech recognition API is blocked or quiet, keep interface active
+            console.log('Voice recognition notification:', err);
           }
         );
       }
@@ -215,13 +383,18 @@ export default function App() {
           onQuickCommand={(cmd) => processCommand(cmd)}
         />
 
-        {/* Right Command Feed & Logs */}
+        {/* Right Command Feed & Chat History with Database Integration */}
         <CommandLogPanel
           messages={messages}
           onSendMessage={(msg) => processCommand(msg)}
-          onClearLogs={() => setMessages([])}
           ttsEnabled={ttsEnabled}
           onToggleTts={() => setTtsEnabled(!ttsEnabled)}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSelectSession}
+          onNewChat={handleNewChat}
+          onDeleteSession={handleDeleteSession}
+          isBackendConnected={isBackendConnected}
         />
       </main>
 
