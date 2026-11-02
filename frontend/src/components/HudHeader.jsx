@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Maximize2, Shield, Radio, EyeOff } from 'lucide-react';
+import { Volume2, VolumeX, Maximize2, Shield, Radio, EyeOff, Scan, Layers } from 'lucide-react';
 import { soundFX } from '../utils/audioEffects';
 
 export default function HudHeader({
@@ -8,6 +8,9 @@ export default function HudHeader({
   isMuted,
   onToggleMute,
   onHideToBackground,
+  holographicMode = true,
+  onToggleHologram,
+  onTriggerFaceScan,
 }) {
   const [timeStr, setTimeStr] = useState('');
 
@@ -103,6 +106,34 @@ export default function HudHeader({
             />
           ))}
         </div>
+
+        {/* Holographic 3D Matrix Projection Toggle */}
+        {onToggleHologram && (
+          <button
+            className={`hud-btn-icon holo-toggle-btn ${holographicMode ? 'active' : ''}`}
+            onClick={() => {
+              soundFX.playClick();
+              onToggleHologram();
+            }}
+            title={holographicMode ? 'Holographic 3D Projection: ACTIVE' : 'Holographic 3D Projection: DISABLED'}
+          >
+            <Layers size={17} />
+          </button>
+        )}
+
+        {/* Biometric Face Scan Verification */}
+        {onTriggerFaceScan && (
+          <button
+            className="hud-btn-icon facescan-header-btn"
+            onClick={() => {
+              soundFX.playClick();
+              onTriggerFaceScan();
+            }}
+            title="Initiate Holographic Biometric Face Scan"
+          >
+            <Scan size={17} />
+          </button>
+        )}
 
         {/* Audio Effects Mute */}
         <button

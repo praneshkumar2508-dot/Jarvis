@@ -887,6 +887,7 @@ def check_direct_intent(query: str) -> Optional[str]:
     Instantly executes direct desktop commands with 100% reliability and zero latency,
     preventing LLM hallucination or network dropouts.
     """
+    global LAST_CLIENT_ACTION
     q = query.lower().strip()
 
     # 1. YouTube & Music / Video Direct Playback
@@ -1032,6 +1033,14 @@ def check_direct_intent(query: str) -> Optional[str]:
         "show application", "restore jarvis", "restore window", "wake up jarvis", "open jarvis"
     ]) or q == "wake up":
         return restore_application()
+
+    # 6B. Holographic Biometric Face Scan Direct Intent
+    if any(phrase in q for phrase in [
+        "face scan", "scan face", "biometric scan", "verify identity",
+        "scan my face", "facial recognition", "verify my identity", "start face scan"
+    ]):
+        LAST_CLIENT_ACTION = {"type": "trigger_facescan"}
+        return "Initiating holographic biometric facial recognition sweep. Please align with optical sensors, sir."
 
     # 7. Lock Workstation
     if any(phrase in q for phrase in ["lock computer", "lock screen", "lock my pc", "lock the pc", "lock system", "lock workstation"]):

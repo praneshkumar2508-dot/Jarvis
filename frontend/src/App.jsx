@@ -5,6 +5,8 @@ import TelemetryPanel from './components/TelemetryPanel';
 import CommandLogPanel from './components/CommandLogPanel';
 import HudFooter from './components/HudFooter';
 import WakeupOverlay from './components/WakeupOverlay';
+import HolographicEffects from './components/HolographicEffects';
+import BiometricFaceScanner from './components/BiometricFaceScanner';
 import { soundFX } from './utils/audioEffects';
 import { JarvisSpeech } from './utils/speechService';
 import { ClapDetector } from './utils/clapDetector';
@@ -35,6 +37,12 @@ export default function App() {
   const [wakeStatusText, setWakeStatusText] = useState('STANDBY // CLAP OR SNAP TO WAKE J.A.R.V.I.S.');
   const [interimTranscript, setInterimTranscript] = useState('');
 
+  // Holographic Effects & Biometric Face Scan State
+  const [holographicMode, setHolographicMode] = useState(true);
+  const [biometricVerified, setBiometricVerified] = useState(false);
+  const [pendingClapWakeup, setPendingClapWakeup] = useState(false);
+  const [standaloneFaceScan, setStandaloneFaceScan] = useState(false);
+
   // Chat sessions state
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
@@ -48,6 +56,7 @@ export default function App() {
   const isAwakeRef = useRef(false);
   const isWakingUpRef = useRef(false);
   const isBackgroundModeRef = useRef(false);
+  const biometricVerifiedRef = useRef(false);
 
   // Keep refs synchronized
   useEffect(() => {
@@ -61,6 +70,10 @@ export default function App() {
   useEffect(() => {
     isBackgroundModeRef.current = isBackgroundMode;
   }, [isBackgroundMode]);
+
+  useEffect(() => {
+    biometricVerifiedRef.current = biometricVerified;
+  }, [biometricVerified]);
 
   // 1. Initialize Speech System
   useEffect(() => {
@@ -83,10 +96,19 @@ export default function App() {
 
     const handleClap = () => {
       if (isBackgroundModeRef.current || (!isAwakeRef.current && !isWakingUpRef.current)) {
-        console.log('[CLAP DETECTED] Triggering J.A.R.V.I.S. awakening sequence from background/standby...');
+        console.log('[CLAP DETECTED] Evaluating biometric authentication before awakening...');
         setIsBackgroundMode(false);
         isBackgroundModeRef.current = false;
-        triggerWakeup();
+
+        if (biometricVerifiedRef.current) {
+          // Biometrics already verified -> wake up directly!
+          triggerWakeup();
+        } else {
+          // Face scan mandatory before wakeup!
+          soundFX.playAlert();
+          setPendingClapWakeup(true);
+          setWakeStatusText('CLAP HEARD // FACIAL SCAN REQUIRED TO ARM ARC REACTOR');
+        }
       }
     };
 
@@ -262,9 +284,11 @@ export default function App() {
   const triggerWakeup = useCallback(() => {
     setIsBackgroundMode(false);
     isBackgroundModeRef.current = false;
+    setPendingClapWakeup(false);
     if (isAwakeRef.current || isWakingUpRef.current) return;
 
     setIsWakingUp(true);
+    setBiometricVerified(true);
     setWakeStatusText('ARC REACTOR IGNITING // ENERGIZING...');
 
     // Stop clap detector while active to free mic for speech recognition
@@ -498,7 +522,10 @@ export default function App() {
 
         // If backend provided an active client action (e.g. open website, hide window)
         if (response.action) {
-          if (response.action.type === 'hide_window') {
+          if (response.action.type === 'trigger_facescan') {
+            setStandaloneFaceScan(true);
+            soundFX.playClick();
+          } else if (response.action.type === 'hide_window') {
             handleEnterBackgroundMode();
           } else if (response.action.type === 'restore_window') {
             setIsBackgroundMode(false);
@@ -648,7 +675,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Awakening & Dormant Standby Overlay */}
+      {/* Holographic 3D Projection Matrix & Atmospheric Effects */}
+      <HolographicEffects enabled={holographicMode} activeTheme={currentTheme} />
+
+      {/* Awakening & Dormant Standby Overlay with Mandatory Face Scan Prior to Clap */}
       <WakeupOverlay
         isAwake={isAwake}
         isWakingUp={isWakingUp}
@@ -656,7 +686,36 @@ export default function App() {
         micVolume={micVolume}
         wakeStatusText={wakeStatusText}
         isBackgroundMode={isBackgroundMode}
+        biometricVerified={biometricVerified}
+        onBiometricVerified={(profile) => {
+          setBiometricVerified(true);
+          if (pendingClapWakeup) {
+            triggerWakeup();
+          }
+        }}
+        pendingClapWakeup={pendingClapWakeup}
       />
+
+      {/* Standalone On-Demand Holographic Face Scanner Modal */}
+      {standaloneFaceScan && (
+        <div className="standalone-facescan-backdrop" onClick={() => setStandaloneFaceScan(false)}>
+          <div className="standalone-facescan-card" onClick={(e) => e.stopPropagation()}>
+            <BiometricFaceScanner
+              onScanComplete={(profile) => {
+                setBiometricVerified(true);
+                setStandaloneFaceScan(false);
+                soundFX.playAccessGranted();
+                const msg = "Biometric facial recognition confirmed. Welcome back, Commander Pranesh.";
+                setStatusMessage(msg);
+                if (speechRef.current) speechRef.current.speak(msg);
+              }}
+              onCancel={() => setStandaloneFaceScan(false)}
+              title="HOLOGRAPHIC BIOMETRIC RECOGNITION"
+              subtitle="COMMANDER CLEARANCE VERIFICATION // LEVEL 10"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Top Header */}
       {!isBackgroundMode && (
@@ -666,6 +725,15 @@ export default function App() {
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
           onHideToBackground={handleEnterBackgroundMode}
+          holographicMode={holographicMode}
+          onToggleHologram={() => {
+            soundFX.playHologramGlitch();
+            setHolographicMode((prev) => !prev);
+          }}
+          onTriggerFaceScan={() => {
+            soundFX.playClick();
+            setStandaloneFaceScan(true);
+          }}
         />
       )}
 

@@ -1556,3 +1556,718 @@ html, body {
   letter-spacing: 1px;
 }
 
+
+/* ==========================================================================
+   HOLOGRAPHIC 3D PROJECTION SYSTEM & ATMOSPHERIC EFFECTS
+   ========================================================================== */
+
+.holographic-system-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+  overflow: hidden;
+}
+
+/* 1. Holographic Laser Scanning Bar */
+.holo-laser-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, rgba(var(--hud-primary-rgb), 0.2) 15%, var(--hud-primary) 50%, rgba(var(--hud-primary-rgb), 0.2) 85%, transparent 100%);
+  box-shadow: 0 0 12px var(--hud-primary), 0 0 24px rgba(var(--hud-primary-rgb), 0.6);
+  opacity: 0.65;
+  animation: holoLaserScan 7s linear infinite;
+}
+
+@keyframes holoLaserScan {
+  0% {
+    top: -5%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.75;
+  }
+  90% {
+    opacity: 0.75;
+  }
+  100% {
+    top: 105%;
+    opacity: 0;
+  }
+}
+
+/* 2. Micro-Scanlines CRT Interference */
+.holo-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(var(--hud-primary-rgb), 0.02) 0px,
+    rgba(var(--hud-primary-rgb), 0.02) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  opacity: 0.8;
+}
+
+/* 3. Anamorphic Center Lens Flare */
+.holo-anamorphic-flare {
+  position: absolute;
+  top: 50%;
+  left: -10%;
+  right: -10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(var(--hud-primary-rgb), 0.08) 25%, rgba(var(--hud-primary-rgb), 0.35) 50%, rgba(var(--hud-primary-rgb), 0.08) 75%, transparent 100%);
+  filter: blur(1px);
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 4. Radial Projector Cone from Center Core */
+.holo-projector-cone {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 900px;
+  height: 900px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(var(--hud-primary-rgb), 0.06) 0%, rgba(var(--hud-secondary-rgb), 0.02) 40%, transparent 70%);
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(20px);
+}
+
+/* 5. 3D Perspective Cyber-Grid Floor */
+.holo-perspective-grid {
+  position: absolute;
+  bottom: -40px;
+  left: -20%;
+  right: -20%;
+  height: 220px;
+  background-image:
+    linear-gradient(rgba(var(--hud-primary-rgb), 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--hud-primary-rgb), 0.12) 1px, transparent 1px);
+  background-size: 32px 32px;
+  transform: perspective(450px) rotateX(72deg);
+  transform-origin: bottom center;
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 85%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 85%);
+  pointer-events: none;
+}
+
+/* 6. Floating Holographic Quantum Energy Particles */
+.holo-particles-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.holo-particle {
+  position: absolute;
+  background: var(--hud-primary);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--hud-primary), 0 0 16px rgba(var(--hud-primary-rgb), 0.6);
+  animation: holoParticleFloat infinite ease-in-out;
+}
+
+@keyframes holoParticleFloat {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-35px) scale(1.3);
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateY(-70px) scale(0.8);
+    opacity: 0.2;
+  }
+}
+
+/* 7. Holographic Diagnostic Corner Markers */
+.holo-corner-marker {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: rgba(var(--hud-primary-rgb), 0.6);
+  text-shadow: 0 0 8px rgba(var(--hud-primary-rgb), 0.4);
+  pointer-events: none;
+  z-index: 85;
+}
+
+.holo-marker-bracket {
+  color: var(--hud-primary);
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.marker-tl { top: 72px; left: 24px; }
+.marker-tr { top: 72px; right: 24px; }
+.marker-bl { bottom: 36px; left: 24px; }
+.marker-br { bottom: 36px; right: 24px; }
+
+/* ==========================================================================
+   BIOMETRIC FACIAL SCANNER HUD COMPONENT
+   ========================================================================== */
+
+.facescan-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.facescan-hud-frame {
+  position: relative;
+  width: 100%;
+  background: rgba(4, 12, 24, 0.88);
+  border: 1px solid rgba(var(--hud-primary-rgb), 0.35);
+  box-shadow: 0 0 25px rgba(var(--hud-primary-rgb), 0.25), inset 0 0 20px rgba(var(--hud-primary-rgb), 0.1);
+  border-radius: 12px;
+  padding: 20px 24px;
+  backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: scanModalEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes scanModalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.facescan-header {
+  border-bottom: 1px solid rgba(var(--hud-primary-rgb), 0.2);
+  padding-bottom: 10px;
+}
+
+.facescan-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.facescan-icon-pulse {
+  animation: hudIconPulse 1.8s infinite alternate;
+}
+
+@keyframes hudIconPulse {
+  0% { filter: drop-shadow(0 0 2px var(--hud-primary)); }
+  100% { filter: drop-shadow(0 0 10px var(--hud-primary)); }
+}
+
+.facescan-title {
+  font-family: var(--font-hud);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(var(--hud-primary-rgb), 0.8);
+  flex: 1;
+}
+
+.facescan-subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: rgba(var(--hud-primary-rgb), 0.7);
+  letter-spacing: 1px;
+  margin-top: 3px;
+}
+
+.facescan-close-btn {
+  background: transparent;
+  border: 1px solid rgba(var(--hud-primary-rgb), 0.3);
+  color: var(--hud-primary);
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.facescan-close-btn:hover {
+  background: rgba(var(--hud-primary-rgb), 0.15);
+  box-shadow: 0 0 8px var(--hud-primary);
+}
+
+/* Center Scanner Viewport */
+.facescan-viewport {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(var(--hud-primary-rgb), 0.5);
+  box-shadow: 0 0 20px rgba(var(--hud-primary-rgb), 0.35), inset 0 0 25px rgba(var(--hud-primary-rgb), 0.25);
+  background: #020712;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.facescan-viewport.verified {
+  border-color: var(--hud-success);
+  box-shadow: 0 0 30px var(--hud-success), inset 0 0 30px rgba(0, 255, 170, 0.4);
+}
+
+.facescan-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  filter: contrast(1.15) brightness(1.1) saturate(1.2);
+}
+
+.facescan-synthetic-mesh {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hud-primary);
+}
+
+.synthetic-face-svg {
+  width: 85%;
+  height: 85%;
+  filter: drop-shadow(0 0 6px var(--hud-primary));
+  animation: faceMeshPulse 2.4s infinite ease-in-out;
+}
+
+@keyframes faceMeshPulse {
+  0% { transform: scale(0.97); opacity: 0.85; }
+  50% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(0.97); opacity: 0.85; }
+}
+
+.facescan-tint-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, transparent 40%, rgba(4, 12, 24, 0.75) 90%);
+  pointer-events: none;
+}
+
+/* Oscillating Laser Beam Sweep */
+.facescan-laser-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--hud-primary), #ffffff, var(--hud-primary), transparent);
+  box-shadow: 0 0 15px var(--hud-primary), 0 0 25px var(--hud-primary);
+  animation: faceLaserSweep 2s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes faceLaserSweep {
+  0% { top: 5%; }
+  100% { top: 95%; }
+}
+
+/* 4-Corner Holographic HUD Target Brackets */
+.hud-bracket {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-color: var(--hud-primary);
+  border-style: solid;
+  pointer-events: none;
+}
+
+.bracket-tl { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
+.bracket-tr { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
+.bracket-bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
+.bracket-br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+
+/* Rotating Target Reticle Rings */
+.facescan-reticle-ring {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ring-outer {
+  inset: 8px;
+  border: 1px dashed rgba(var(--hud-primary-rgb), 0.45);
+  animation: spinReticle 14s linear infinite;
+}
+
+.ring-inner {
+  inset: 22px;
+  border: 1px dotted rgba(var(--hud-primary-rgb), 0.35);
+  animation: spinReticleReverse 9s linear infinite;
+}
+
+@keyframes spinReticle {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinReticleReverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+/* Verification Badge Overlay */
+.facescan-verified-badge {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 15, 20, 0.88);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  animation: badgeFadeIn 0.35s ease-out;
+}
+
+@keyframes badgeFadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.verified-shield-icon {
+  color: var(--hud-success);
+  filter: drop-shadow(0 0 12px var(--hud-success));
+  animation: shieldPop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes shieldPop {
+  0% { transform: scale(0.5); }
+  70% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.verified-text-title {
+  font-family: var(--font-hud);
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  color: var(--hud-success);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 255, 170, 0.6);
+}
+
+.verified-text-name {
+  font-family: var(--font-hud);
+  font-size: 0.95rem;
+  letter-spacing: 1.5px;
+  color: #ffffff;
+  font-weight: 800;
+  text-shadow: 0 0 12px var(--hud-primary);
+}
+
+/* Biometric Progress Bar */
+.facescan-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.facescan-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #d1e8ff;
+}
+
+.facescan-status-msg {
+  letter-spacing: 0.5px;
+  color: var(--hud-primary);
+}
+
+.facescan-percent {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.facescan-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--hud-primary-rgb), 0.2);
+}
+
+.facescan-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--hud-secondary), var(--hud-primary));
+  box-shadow: 0 0 10px var(--hud-primary);
+  border-radius: 3px;
+  transition: width 0.08s ease-out;
+}
+
+.facescan-progress-bar.verified {
+  background: linear-gradient(90deg, var(--hud-primary), var(--hud-success));
+  box-shadow: 0 0 12px var(--hud-success);
+}
+
+/* Telemetry Matrix Grid */
+.facescan-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.telemetry-cell {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(var(--hud-primary-rgb), 0.15);
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: center;
+}
+
+.cell-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.5px;
+}
+
+.cell-value {
+  font-family: var(--font-hud);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 1px;
+}
+
+/* Quick Action Row */
+.facescan-action-row {
+  display: flex;
+  justify-content: center;
+}
+
+.facescan-bypass-btn {
+  background: rgba(var(--hud-primary-rgb), 0.08);
+  border: 1px dashed rgba(var(--hud-primary-rgb), 0.35);
+  color: var(--hud-primary);
+  font-family: var(--font-hud);
+  font-size: 0.68rem;
+  letter-spacing: 1.5px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.facescan-bypass-btn:hover {
+  background: rgba(var(--hud-primary-rgb), 0.2);
+  border-color: var(--hud-primary);
+  box-shadow: 0 0 10px rgba(var(--hud-primary-rgb), 0.4);
+}
+
+/* ==========================================================================
+   WAKEUP OVERLAY BIOMETRIC ADDITIONS
+   ========================================================================== */
+
+.wakeup-facescan-modal {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 500px;
+  padding: 16px;
+}
+
+.wakeup-core.locked {
+  border-color: rgba(255, 170, 0, 0.5);
+  box-shadow: 0 0 25px rgba(255, 170, 0, 0.3), inset 0 0 20px rgba(255, 170, 0, 0.2);
+  cursor: pointer;
+}
+
+.wakeup-core.unlocked {
+  border-color: rgba(0, 255, 170, 0.6);
+  box-shadow: 0 0 35px rgba(0, 255, 170, 0.4), inset 0 0 25px rgba(0, 255, 170, 0.3);
+  cursor: pointer;
+}
+
+.biometric-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-hud);
+  font-size: 0.72rem;
+  letter-spacing: 1.5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-top: 6px;
+  border: 1px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.biometric-status-pill.unverified {
+  background: rgba(255, 170, 0, 0.1);
+  border-color: rgba(255, 170, 0, 0.3);
+  color: var(--hud-warn);
+}
+
+.biometric-status-pill.verified {
+  background: rgba(0, 255, 170, 0.12);
+  border-color: rgba(0, 255, 170, 0.4);
+  color: var(--hud-success);
+  box-shadow: 0 0 12px rgba(0, 255, 170, 0.25);
+}
+
+.biometric-status-pill.flash-alert {
+  background: rgba(255, 51, 68, 0.25);
+  border-color: var(--hud-danger);
+  color: #ff3344;
+  box-shadow: 0 0 16px var(--hud-danger);
+  animation: deniedFlashAnim 0.5s infinite alternate;
+}
+
+@keyframes deniedFlashAnim {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.04); }
+}
+
+.facescan-prompt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.prompt-desc {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: #a0c4e8;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.facescan-launch-btn {
+  background: linear-gradient(135deg, rgba(var(--hud-primary-rgb), 0.25), rgba(var(--hud-secondary-rgb), 0.35));
+  border: 1px solid var(--hud-primary);
+  color: #ffffff;
+  font-family: var(--font-hud);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 12px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 0 16px rgba(var(--hud-primary-rgb), 0.4);
+  transition: all 0.25s ease;
+}
+
+.facescan-launch-btn:hover {
+  background: linear-gradient(135deg, rgba(var(--hud-primary-rgb), 0.4), rgba(var(--hud-secondary-rgb), 0.5));
+  box-shadow: 0 0 25px var(--hud-primary);
+  transform: translateY(-2px);
+}
+
+.denied-warning-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-hud);
+  font-size: 0.72rem;
+  letter-spacing: 1px;
+  color: var(--hud-danger);
+  text-shadow: 0 0 8px var(--hud-danger);
+}
+
+.wakeup-manual-btn.armed {
+  background: linear-gradient(135deg, rgba(0, 255, 170, 0.2), rgba(var(--hud-primary-rgb), 0.25));
+  border-color: var(--hud-success);
+  color: #ffffff;
+  box-shadow: 0 0 20px rgba(0, 255, 170, 0.4);
+}
+
+.wakeup-manual-btn.armed:hover {
+  background: linear-gradient(135deg, rgba(0, 255, 170, 0.35), rgba(var(--hud-primary-rgb), 0.4));
+  box-shadow: 0 0 35px var(--hud-success);
+}
+
+.re-scan-link {
+  margin-top: 4px;
+}
+
+.text-link-btn {
+  background: transparent;
+  border: none;
+  color: rgba(var(--hud-primary-rgb), 0.7);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.2s ease;
+}
+
+.text-link-btn:hover {
+  color: var(--hud-primary);
+  text-decoration: underline;
+}
+
+/* Standalone On-Demand Face Scan Modal Backdrop */
+.standalone-facescan-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(2, 6, 16, 0.82);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.standalone-facescan-card {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  padding: 16px;
+}
+
+.holo-toggle-btn.active {
+  color: var(--hud-primary);
+  border-color: var(--hud-primary);
+  box-shadow: 0 0 10px rgba(var(--hud-primary-rgb), 0.5);
+}
+
+.facescan-header-btn:hover {
+  color: var(--hud-primary);
+  border-color: var(--hud-primary);
+  box-shadow: 0 0 10px rgba(var(--hud-primary-rgb), 0.5);
+}

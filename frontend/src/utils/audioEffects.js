@@ -209,6 +209,72 @@ class SoundFX {
       osc.stop(t + 0.6);
     } catch {}
   }
+
+  playBiometricScan() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      // High-frequency biometric chirping pulse
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1800, t);
+      osc.frequency.exponentialRampToValueAtTime(2800, t + 0.12);
+      gain.gain.setValueAtTime(0.04, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.12);
+    } catch {}
+  }
+
+  playAccessGranted() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      // Dual resonant clearance chime (Major 3rd ascending: 880Hz -> 1108Hz -> 1320Hz)
+      const freqs = [880, 1108.73, 1318.51];
+      freqs.forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const start = t + idx * 0.08;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.08, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.35);
+      });
+    } catch {}
+  }
+
+  playHologramGlitch() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(600, t);
+      osc.frequency.setValueAtTime(1400, t + 0.04);
+      osc.frequency.setValueAtTime(300, t + 0.08);
+      gain.gain.setValueAtTime(0.03, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.14);
+    } catch {}
+  }
 }
 
 export const soundFX = new SoundFX();
