@@ -221,11 +221,7 @@ def send_whatsapp_message(recipient: Optional[str] = None, message: str = "") ->
     message: the message content to transmit.
     """
     global LAST_CLIENT_ACTION
-    cleaned_msg = message.strip()
-    if not cleaned_msg and recipient:
-        cleaned_msg = recipient
-        recipient = None
-
+    cleaned_msg = message.strip() if message else ""
     if not cleaned_msg:
         cleaned_msg = "Greetings, this transmission was dispatched via J.A.R.V.I.S."
 
@@ -898,34 +894,122 @@ def check_direct_intent(query: str) -> Optional[str]:
         return play_youtube(query)
 
     # 2. WhatsApp Instant Messaging
-    if "whatsapp" in q or q.startswith("send message ") or q.startswith("message on whatsapp"):
-        # Match "send message to [contact] on whatsapp saying [msg]" or "whatsapp [contact] [msg]"
-        match = re.search(r"(?:whatsapp|message\s+on\s+whatsapp)\s*(?:to\s+([a-zA-Z0-9_+]+))?\s*(?:saying|with text|that|:)?\s*(.*)", q, re.IGNORECASE)
-        if match:
-            contact = (match.group(1) or "").strip()
-            msg = (match.group(2) or "").strip()
-            if not msg and contact and not contact.startswith("+"):
-                msg = contact
-                contact = ""
+    if "whatsapp" in q or q.startswith("send message") or q.startswith("message on whatsapp"):
+        raw = query.strip()
+        contact = None
+        msg = None
+
+        # Pattern A: Message in quotes: e.g. send a message "how are you" to bhuvaneswari on whatsapp
+        m_quote = re.search(r'["\']([^"\']+)["\']', raw)
+        if m_quote:
+            msg = m_quote.group(1).strip()
+            m_contact = re.search(r'\bto\s+([a-zA-Z0-9_+]+)', raw, re.IGNORECASE)
+            if m_contact:
+                c = m_contact.group(1).strip()
+                if c.lower() not in ["whatsapp", "me", "him", "her"]:
+                    contact = c
+
+        # Pattern B: to <contact> ... saying/that/with text/: <msg>
+        if not msg:
+            m = re.search(r'\bto\s+([a-zA-Z0-9_+]+)\s*(?:on\s+whatsapp)?\s*(?:saying|that|with\s+text|with\s+message|:)\s*(.+)', raw, re.IGNORECASE)
+            if m:
+                contact = m.group(1).strip()
+                msg = m.group(2).strip()
+                msg = re.sub(r'\s+on\s+whatsapp$', '', msg, flags=re.IGNORECASE).strip()
+
+        # Pattern C: on whatsapp to <contact> saying <msg>
+        if not msg:
+            m = re.search(r'on\s+whatsapp\s+to\s+([a-zA-Z0-9_+]+)\s*(?:saying|that|with\s+text|with\s+message|:)?\s*(.+)', raw, re.IGNORECASE)
+            if m:
+                contact = m.group(1).strip()
+                msg = m.group(2).strip()
+
+        # Pattern D: send message on whatsapp saying <msg>
+        if not msg:
+            m = re.search(r'(?:send\s+(?:a\s+)?message\s+)?on\s+whatsapp\s+(?:saying|with\s+text|with\s+message|that|:)\s*(.+)', raw, re.IGNORECASE)
+            if m:
+                msg = m.group(1).strip()
+
+        # Pattern E: whatsapp <contact> [saying] <msg>
+        if not msg:
+            m = re.search(r'\bwhatsapp\s+([a-zA-Z0-9_+]+)\s+(?:saying|that|:)?\s*(.+)', raw, re.IGNORECASE)
+            if m:
+                c = m.group(1).strip()
+                rest = m.group(2).strip()
+                if c.lower() not in ['message', 'to', 'web', 'app', 'call', 'audio', 'saying', 'that', 'with', 'about', 'on']:
+                    contact = c
+                    msg = rest
+
+        # Pattern F: send message <msg> to <contact> on whatsapp (unquoted)
+        if not msg:
+            m = re.search(r'send\s+(?:a\s+)?message\s+(.+?)\s+to\s+([a-zA-Z0-9_+]+)\s*(?:on\s+whatsapp)?', raw, re.IGNORECASE)
+            if m:
+                potential_msg = m.group(1).strip()
+                c = m.group(2).strip()
+                if potential_msg.lower() not in ["on whatsapp", "to"]:
+                    msg = potential_msg
+                    contact = c
+
+        # Pattern G: send message to <contact> on whatsapp (no message body)
+        if not contact and not msg:
+            m = re.search(r'\b(?:send\s+(?:a\s+)?message\s+)?to\s+([a-zA-Z0-9_+]+)\s+on\s+whatsapp', raw, re.IGNORECASE)
+            if m:
+                contact = m.group(1).strip()
+
+        if contact or msg:
             return send_whatsapp_message(contact or None, msg or "Greetings from J.A.R.V.I.S.")
-        return send_whatsapp_message(None, query)
+
+        if q in ["whatsapp", "open whatsapp", "launch whatsapp", "whatsapp web"]:
+            return launch_application("whatsapp")
 
     # 3. Gmail Instant Email Composer
     if "gmail" in q or "send email" in q or "send an email" in q or "compose email" in q or q.startswith("email "):
-        match = re.search(r"(?:send\s+)?(?:an?\s+)?(?:email|gmail)(?:\s+via\s+(?:gmail|email))?\s*(?:to\s+([^\s]+))?\s*(?:saying|about|with\s+message|that|:)?\s*(.*)", q, re.IGNORECASE)
-        if match:
-            recipient = (match.group(1) or "").strip()
-            body_or_text = (match.group(2) or "").strip()
-            subject = "Directive via J.A.R.V.I.S."
-            body = body_or_text
-            # If subject and body specified
-            if "subject" in body_or_text.lower() and "body" in body_or_text.lower():
-                sm = re.search(r"subject\s+(.*?)\s+body\s+(.*)", body_or_text, re.IGNORECASE)
-                if sm:
-                    subject = sm.group(1).strip()
-                    body = sm.group(2).strip()
-            return send_gmail_message(recipient, subject, body or "Greetings, message dispatched via J.A.R.V.I.S.")
-        return send_gmail_message("", "Directive from J.A.R.V.I.S.", query)
+        raw = query.strip()
+        recipient = None
+        subject = "Directive via J.A.R.V.I.S."
+        body = None
+
+        # Check for quotes in email message
+        m_quote = re.search(r'["\']([^"\']+)["\']', raw)
+        if m_quote:
+            body = m_quote.group(1).strip()
+            m_rec = re.search(r'\bto\s+([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+|[a-zA-Z0-9_+]+)', raw, re.IGNORECASE)
+            if m_rec:
+                recipient = m_rec.group(1).strip()
+
+        if not body and "subject" in q and "body" in q:
+            sm = re.search(r'\bto\s+([^\s]+)', raw, re.IGNORECASE)
+            if sm:
+                recipient = sm.group(1).strip()
+            sub_body_m = re.search(r'subject\s+(.*?)\s+body\s+(.*)', raw, re.IGNORECASE)
+            if sub_body_m:
+                subject = sub_body_m.group(1).strip()
+                body = sub_body_m.group(2).strip()
+
+        if not body:
+            m = re.search(r'\bto\s+([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+|[a-zA-Z0-9_+]+)\s*(?:via\s+gmail)?\s*(?:saying|about|with\s+message|with\s+text|that|:)\s*(.+)', raw, re.IGNORECASE)
+            if m:
+                recipient = m.group(1).strip()
+                body = m.group(2).strip()
+
+        if not body:
+            m = re.search(r'\b(?:gmail|email)\s+([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+|[a-zA-Z0-9_+]+)\s+(.+)', raw, re.IGNORECASE)
+            if m:
+                r = m.group(1).strip()
+                if r.lower() not in ["to", "message", "compose", "send"]:
+                    recipient = r
+                    body = m.group(2).strip()
+
+        if not recipient and not body:
+            m = re.search(r'\bto\s+([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+|[a-zA-Z0-9_+]+)', raw, re.IGNORECASE)
+            if m:
+                recipient = m.group(1).strip()
+
+        if recipient or body:
+            return send_gmail_message(recipient or "", subject, body or "Greetings, message dispatched via J.A.R.V.I.S.")
+
+        if q in ["gmail", "open gmail", "launch gmail"]:
+            return open_website("https://mail.google.com")
 
     # 4. Multimedia Playback Control
     if any(q == phrase for phrase in ["pause", "resume", "pause music", "resume music", "play music", "pause video", "resume video", "stop music"]):
