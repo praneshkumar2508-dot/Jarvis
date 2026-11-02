@@ -38,3 +38,7 @@ env/
 *.sqlite
 *.sqlite3
 backend/screenshots/
+.jarvis_profile/
+*.log
+backend/*.log
+

@@ -1,7 +1,10 @@
+import os
 from datetime import datetime
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -152,6 +155,27 @@ def send_message(session_id: str, payload: schemas.ChatQueryRequest, db: Session
         session_id=session_id,
         action=client_action
     )
+
+# ---------------------------------------------------------
+# FRONTEND STATIC FILES SERVING (Unified Desktop Mode)
+# ---------------------------------------------------------
+frontend_dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.exists(frontend_dist_dir):
+    assets_dir = os.path.join(frontend_dist_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        if full_path.startswith("api"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        target_path = os.path.join(frontend_dist_dir, full_path)
+        if full_path and os.path.isfile(target_path):
+            return FileResponse(target_path)
+        index_file = os.path.join(frontend_dist_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
 if __name__ == "__main__":
     import uvicorn

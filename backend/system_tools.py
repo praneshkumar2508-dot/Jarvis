@@ -1,4 +1,7 @@
 import os
+import re
+import urllib.parse
+import urllib.request
 import subprocess
 import webbrowser
 import json
@@ -148,6 +151,198 @@ def open_website(url_or_name: str) -> str:
         pass
 
     return f"Accessing {url_or_name} in your browser now, sir."
+
+# -------------------------------------------------------------
+# 3B. YOUTUBE MUSIC & VIDEO STREAMING
+# -------------------------------------------------------------
+def play_youtube(query: str) -> str:
+    """
+    Search YouTube and automatically play the requested song, music track, or video directly.
+    Example queries: 'Shape of You', 'AC/DC Back in Black', 'Iron Man theme song', 'lofi hip hop'.
+    """
+    global LAST_CLIENT_ACTION
+    cleaned = query.strip()
+    # Strip conversational prefixes
+    for prefix in [
+        "play on youtube", "play song on youtube", "play a song on youtube",
+        "play a song", "play song", "play music", "play video", "play",
+        "stream", "listen to", "search youtube for", "youtube search", "youtube"
+    ]:
+        if cleaned.lower().startswith(prefix):
+            cleaned = cleaned[len(prefix):].strip()
+            break
+    if not cleaned:
+        cleaned = "Iron Man AC/DC Back in Black"
+
+    search_url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(cleaned)}"
+    target_url = search_url
+
+    # Attempt fast scraping of the top matching video ID
+    try:
+        req = urllib.request.Request(
+            search_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+            matches = re.findall(r"/watch\?v=([a-zA-Z0-9_-]{11})", html)
+            if matches:
+                video_id = matches[0]
+                target_url = f"https://www.youtube.com/watch?v={video_id}&autoplay=1"
+    except Exception:
+        pass
+
+    # Register client action for HUD browser navigation
+    LAST_CLIENT_ACTION = {"type": "open_url", "url": target_url}
+
+    # Physical OS launch
+    browser_exe = get_browser_executable()
+    if browser_exe:
+        try:
+            subprocess.Popen([browser_exe, target_url])
+        except Exception:
+            pass
+    try:
+        subprocess.Popen(f'cmd.exe /c start "" "{target_url}"', shell=True)
+    except Exception:
+        pass
+
+    return f"Immediately streaming '{cleaned}' on YouTube for you, sir."
+
+# -------------------------------------------------------------
+# 3C. WHATSAPP INSTANT MESSAGING
+# -------------------------------------------------------------
+def send_whatsapp_message(recipient: Optional[str] = None, message: str = "") -> str:
+    """
+    Send or prepare a message via WhatsApp (launches installed WhatsApp Desktop and WhatsApp Web).
+    recipient: optional phone number (e.g. +1234567890) or contact name.
+    message: the message content to transmit.
+    """
+    global LAST_CLIENT_ACTION
+    cleaned_msg = message.strip()
+    if not cleaned_msg and recipient:
+        cleaned_msg = recipient
+        recipient = None
+
+    if not cleaned_msg:
+        cleaned_msg = "Greetings, this transmission was dispatched via J.A.R.V.I.S."
+
+    encoded_msg = urllib.parse.quote(cleaned_msg)
+
+    # Extract digits for phone numbers
+    phone_digits = re.sub(r"[^\d+]", "", recipient) if recipient else ""
+    if phone_digits and len(phone_digits) >= 7:
+        wa_app_url = f"whatsapp://send?phone={phone_digits}&text={encoded_msg}"
+        wa_web_url = f"https://web.whatsapp.com/send?phone={phone_digits}&text={encoded_msg}"
+    else:
+        wa_app_url = f"whatsapp://send?text={encoded_msg}"
+        wa_web_url = f"https://web.whatsapp.com/send?text={encoded_msg}"
+
+    LAST_CLIENT_ACTION = {"type": "open_url", "url": wa_web_url}
+
+    # 1. Launch WhatsApp Desktop protocol
+    try:
+        subprocess.Popen(f'cmd.exe /c start "" "{wa_app_url}"', shell=True)
+    except Exception:
+        pass
+
+    # 2. Launch WhatsApp Web
+    try:
+        subprocess.Popen(f'cmd.exe /c start "" "{wa_web_url}"', shell=True)
+    except Exception:
+        pass
+
+    contact_desc = f"to {recipient}" if recipient else "ready for transmission"
+    return f"WhatsApp message {contact_desc} pre-filled with '{cleaned_msg}'. Dispatch sequence active, sir."
+
+# -------------------------------------------------------------
+# 3D. GMAIL INSTANT MESSAGE COMPOSER
+# -------------------------------------------------------------
+def send_gmail_message(recipient: str = "", subject: str = "", body: str = "") -> str:
+    """
+    Open Gmail composer with pre-filled recipient, subject, and body text.
+    recipient: email address or contact.
+    subject: email subject line.
+    body: email body text.
+    """
+    global LAST_CLIENT_ACTION
+    params = {"view": "cm", "fs": "1"}
+    if recipient:
+        params["to"] = recipient.strip()
+    if subject:
+        params["su"] = subject.strip()
+    if body:
+        params["body"] = body.strip()
+
+    query_string = urllib.parse.urlencode(params)
+    gmail_url = f"https://mail.google.com/mail/?{query_string}"
+
+    LAST_CLIENT_ACTION = {"type": "open_url", "url": gmail_url}
+
+    browser_exe = get_browser_executable()
+    if browser_exe:
+        try:
+            subprocess.Popen([browser_exe, gmail_url])
+        except Exception:
+            pass
+    try:
+        subprocess.Popen(f'cmd.exe /c start "" "{gmail_url}"', shell=True)
+    except Exception:
+        pass
+
+    target_desc = f"to {recipient}" if recipient else "ready for composition"
+    return f"Gmail transmission interface {target_desc} initialized. Directives pre-filled, sir."
+
+# -------------------------------------------------------------
+# 3E. MULTIMEDIA PLAYBACK CONTROL
+# -------------------------------------------------------------
+def control_media(action: str) -> str:
+    """
+    Control desktop multimedia playback across all players (YouTube, Spotify, VLC, browser):
+    action: 'play', 'pause', 'play_pause', 'next', 'previous', 'stop'.
+    """
+    act = action.lower().strip()
+    if act in ["next", "forward", "skip"]:
+        key_code = 176  # VK_MEDIA_NEXT_TRACK
+        desc = "Skipped to next media track"
+    elif act in ["prev", "previous", "back"]:
+        key_code = 177  # VK_MEDIA_PREV_TRACK
+        desc = "Returned to previous media track"
+    elif act in ["stop"]:
+        key_code = 178  # VK_MEDIA_STOP
+        desc = "Stopped media playback"
+    else:
+        key_code = 179  # VK_MEDIA_PLAY_PAUSE
+        desc = "Toggled media playback state"
+
+    ps_cmd = f"(New-Object -ComObject WScript.Shell).SendKeys([char]{key_code})"
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], check=False, timeout=5)
+        return f"{desc}, sir."
+    except Exception as e:
+        return f"Media control error: {str(e)}"
+
+# -------------------------------------------------------------
+# 3F. BACKGROUND STEALTH & WINDOW MINIMIZE / RESTORE
+# -------------------------------------------------------------
+def hide_application() -> str:
+    """
+    Minimize J.A.R.V.I.S. to desktop background stealth mode.
+    Listening remains active in the background for a clap or wake directive.
+    """
+    global LAST_CLIENT_ACTION
+    LAST_CLIENT_ACTION = {"type": "hide_window"}
+    return "Minimizing to desktop background stealth mode, sir. I remain vigilant. Clap your hands at any moment to summon me."
+
+def restore_application() -> str:
+    """
+    Restore J.A.R.V.I.S. from background stealth mode to the full holographic HUD.
+    """
+    global LAST_CLIENT_ACTION
+    LAST_CLIENT_ACTION = {"type": "restore_window"}
+    return "J.A.R.V.I.S. full holographic HUD restored to the foreground, sir. Systems nominal."
 
 # -------------------------------------------------------------
 # 4. SYSTEM FOLDERS & WINDOWS SETTINGS
@@ -698,14 +893,78 @@ def check_direct_intent(query: str) -> Optional[str]:
     """
     q = query.lower().strip()
 
-    # 1. Close / Terminate Commands
+    # 1. YouTube & Music / Video Direct Playback
+    if q.startswith("play ") or q.startswith("stream ") or q.startswith("listen to ") or "on youtube" in q or q.startswith("youtube "):
+        return play_youtube(query)
+
+    # 2. WhatsApp Instant Messaging
+    if "whatsapp" in q or q.startswith("send message ") or q.startswith("message on whatsapp"):
+        # Match "send message to [contact] on whatsapp saying [msg]" or "whatsapp [contact] [msg]"
+        match = re.search(r"(?:whatsapp|message\s+on\s+whatsapp)\s*(?:to\s+([a-zA-Z0-9_+]+))?\s*(?:saying|with text|that|:)?\s*(.*)", q, re.IGNORECASE)
+        if match:
+            contact = (match.group(1) or "").strip()
+            msg = (match.group(2) or "").strip()
+            if not msg and contact and not contact.startswith("+"):
+                msg = contact
+                contact = ""
+            return send_whatsapp_message(contact or None, msg or "Greetings from J.A.R.V.I.S.")
+        return send_whatsapp_message(None, query)
+
+    # 3. Gmail Instant Email Composer
+    if "gmail" in q or "send email" in q or "send an email" in q or "compose email" in q or q.startswith("email "):
+        match = re.search(r"(?:send\s+)?(?:an?\s+)?(?:email|gmail)(?:\s+via\s+(?:gmail|email))?\s*(?:to\s+([^\s]+))?\s*(?:saying|about|with\s+message|that|:)?\s*(.*)", q, re.IGNORECASE)
+        if match:
+            recipient = (match.group(1) or "").strip()
+            body_or_text = (match.group(2) or "").strip()
+            subject = "Directive via J.A.R.V.I.S."
+            body = body_or_text
+            # If subject and body specified
+            if "subject" in body_or_text.lower() and "body" in body_or_text.lower():
+                sm = re.search(r"subject\s+(.*?)\s+body\s+(.*)", body_or_text, re.IGNORECASE)
+                if sm:
+                    subject = sm.group(1).strip()
+                    body = sm.group(2).strip()
+            return send_gmail_message(recipient, subject, body or "Greetings, message dispatched via J.A.R.V.I.S.")
+        return send_gmail_message("", "Directive from J.A.R.V.I.S.", query)
+
+    # 4. Multimedia Playback Control
+    if any(q == phrase for phrase in ["pause", "resume", "pause music", "resume music", "play music", "pause video", "resume video", "stop music"]):
+        return control_media("play_pause")
+    if any(q == phrase for phrase in ["next song", "next track", "skip song", "skip track"]):
+        return control_media("next")
+    if any(q == phrase for phrase in ["previous song", "prev song", "previous track", "last song"]):
+        return control_media("prev")
+
+    # 5. Hide / Background Stealth / Standby
+    if any(phrase in q for phrase in [
+        "hide application", "hide jarvis", "hide on desktop", "hide this application",
+        "hide window", "run in background", "background mode", "go to background",
+        "stealth mode", "hide yourself", "hide in desktop"
+    ]) or q in ["hide", "minimize", "standby", "sleep", "go to sleep"]:
+        return hide_application()
+
+    # 6. Restore / Wakeup
+    if any(phrase in q for phrase in [
+        "show application", "restore jarvis", "restore window", "wake up jarvis", "open jarvis"
+    ]) or q == "wake up":
+        return restore_application()
+
+    # 7. Lock Workstation
+    if any(phrase in q for phrase in ["lock computer", "lock screen", "lock my pc", "lock the pc", "lock system", "lock workstation"]):
+        try:
+            ctypes.windll.user32.LockWorkStation()
+            return "Desktop workstation successfully locked, sir."
+        except Exception:
+            return "Workstation lock directive encountered an error."
+
+    # 8. Close / Terminate Commands
     for prefix in ["close ", "exit ", "kill ", "terminate ", "quit "]:
         if q.startswith(prefix):
             target = q[len(prefix):].strip()
             if target:
                 return close_application(target)
 
-    # 2. Open / Launch Commands
+    # 9. Open / Launch Commands
     for prefix in ["open ", "launch ", "start ", "run "]:
         if q.startswith(prefix):
             target = q[len(prefix):].strip()
@@ -716,15 +975,15 @@ def check_direct_intent(query: str) -> Optional[str]:
             if target:
                 return launch_application(target)
 
-    # 3. Running Apps & Process Listing
+    # 10. Running Apps & Process Listing
     if any(q == phrase for phrase in ["list apps", "running apps", "what apps are open", "active tasks", "running processes", "show running apps"]):
         return list_running_applications()
 
-    # 4. Hardware Telemetry & System Info
+    # 11. Hardware Telemetry & System Info
     if any(q == phrase or phrase in q for phrase in ["system info", "hardware status", "telemetry status", "battery status", "hardware telemetry", "ram status", "storage status"]):
         return get_system_telemetry()
 
-    # 5. Volume Control
+    # 12. Volume Control
     if "mute volume" in q or "mute audio" in q or "mute sound" in q or q == "mute":
         return control_volume("mute")
     if any(w in q for w in ["volume up", "increase volume", "raise volume", "louder"]):
@@ -732,7 +991,7 @@ def check_direct_intent(query: str) -> Optional[str]:
     if any(w in q for w in ["volume down", "decrease volume", "lower volume", "quieter"]):
         return control_volume("down")
 
-    # 6. Screenshot
+    # 13. Screenshot
     if any(w in q for w in ["take a screenshot", "take screenshot", "capture screen"]):
         return take_screenshot()
 

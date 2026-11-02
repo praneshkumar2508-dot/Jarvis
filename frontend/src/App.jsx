@@ -27,9 +27,10 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
 
-  // Wakeup & Standby State (Starts in Dormant Standby mode on home screen)
+  // Wakeup, Standby & Background Stealth State
   const [isAwake, setIsAwake] = useState(false);
   const [isWakingUp, setIsWakingUp] = useState(false);
+  const [isBackgroundMode, setIsBackgroundMode] = useState(false);
   const [micVolume, setMicVolume] = useState(0);
   const [wakeStatusText, setWakeStatusText] = useState('STANDBY // CLAP OR SNAP TO WAKE J.A.R.V.I.S.');
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -46,6 +47,7 @@ export default function App() {
   const clapDetectorRef = useRef(null);
   const isAwakeRef = useRef(false);
   const isWakingUpRef = useRef(false);
+  const isBackgroundModeRef = useRef(false);
 
   // Keep refs synchronized
   useEffect(() => {
@@ -55,6 +57,10 @@ export default function App() {
   useEffect(() => {
     isWakingUpRef.current = isWakingUp;
   }, [isWakingUp]);
+
+  useEffect(() => {
+    isBackgroundModeRef.current = isBackgroundMode;
+  }, [isBackgroundMode]);
 
   // 1. Initialize Speech System
   useEffect(() => {
@@ -76,8 +82,10 @@ export default function App() {
     };
 
     const handleClap = () => {
-      if (!isAwakeRef.current && !isWakingUpRef.current) {
-        console.log('[CLAP DETECTED] Triggering J.A.R.V.I.S. awakening sequence...');
+      if (isBackgroundModeRef.current || (!isAwakeRef.current && !isWakingUpRef.current)) {
+        console.log('[CLAP DETECTED] Triggering J.A.R.V.I.S. awakening sequence from background/standby...');
+        setIsBackgroundMode(false);
+        isBackgroundModeRef.current = false;
         triggerWakeup();
       }
     };
@@ -249,9 +257,11 @@ export default function App() {
   };
 
   // ============================================================
-  // WAKEUP & STANDBY CONTROLLER
+  // WAKEUP, STANDBY & BACKGROUND STEALTH CONTROLLER
   // ============================================================
   const triggerWakeup = useCallback(() => {
+    setIsBackgroundMode(false);
+    isBackgroundModeRef.current = false;
     if (isAwakeRef.current || isWakingUpRef.current) return;
 
     setIsWakingUp(true);
@@ -283,6 +293,33 @@ export default function App() {
         startContinuousVoice();
       }
     }, 1600);
+  }, []);
+
+  // Enter Background Stealth Mode (Collapses into floating core, clap actively listens in background)
+  const handleEnterBackgroundMode = useCallback(() => {
+    const farewell = 'Minimizing to desktop background, sir. I remain vigilant. Clap your hands to summon me at any moment.';
+    setStatusMessage(farewell);
+
+    const activateStealth = () => {
+      soundFX.playPowerDown();
+      setIsBackgroundMode(true);
+      isBackgroundModeRef.current = true;
+      setIsAwake(false);
+      isAwakeRef.current = false;
+      setIsListening(false);
+      setInterimTranscript('');
+      setWakeStatusText('BACKGROUND STEALTH // CLAP HANDS TO RESTORE J.A.R.V.I.S.');
+      if (clapDetectorRef.current) {
+        clapDetectorRef.current.start();
+      }
+    };
+
+    if (speechRef.current) {
+      speechRef.current.stopListening();
+      speechRef.current.speak(farewell, activateStealth);
+    } else {
+      activateStealth();
+    }
   }, []);
 
   const handleSleep = useCallback(() => {
@@ -335,7 +372,7 @@ export default function App() {
     }
   }, []);
 
-  // Voice Command Pre-processor (Handles Standby & cleans wake phrases)
+  // Voice Command Pre-processor (Handles Background Hide, Standby & cleans wake phrases)
   const processVoiceCommand = useCallback((rawTranscript) => {
     if (!rawTranscript || !rawTranscript.trim()) return;
     const trimmed = rawTranscript.trim();
@@ -343,7 +380,18 @@ export default function App() {
 
     console.log('[VOICE INPUT RECEIVED]:', trimmed);
 
-    // 1. Check for sleep / standby command
+    // 1. Check for hide / background stealth command
+    if (
+      lower.includes('hide') ||
+      lower.includes('background') ||
+      lower.includes('minimize') ||
+      lower.includes('stealth')
+    ) {
+      handleEnterBackgroundMode();
+      return;
+    }
+
+    // 2. Check for sleep / standby command
     if (
       lower.includes('standby') ||
       lower.includes('go to sleep') ||
@@ -356,7 +404,7 @@ export default function App() {
       return;
     }
 
-    // 2. Strip wake word prefixes if user said "Jarvis, open..." or "Hey Jarvis, launch..."
+    // 3. Strip wake word prefixes if user said "Jarvis, open..." or "Hey Jarvis, launch..."
     const cleanCommand = trimmed.replace(/^(hey\s+)?jarvis[,:\s]*/i, '').trim();
     if (!cleanCommand) {
       const reply = 'Yes, sir? Standing by for your directive.';
@@ -365,9 +413,9 @@ export default function App() {
       return;
     }
 
-    // 3. Process direct or AI command
+    // 4. Process direct or AI command
     processCommand(cleanCommand);
-  }, [handleSleep]);
+  }, [handleEnterBackgroundMode, handleSleep]);
 
   // Keyboard shortcut listener
   useEffect(() => {
@@ -448,12 +496,20 @@ export default function App() {
         const response = await sendMessage(activeSessionId, query);
         const jarvisText = response.jarvis_message.text;
 
-        // If backend provided an active client action (e.g. open website) and not yet opened
-        if (response.action && response.action.type === 'open_url' && !openedInBrowser) {
-          try {
-            window.open(response.action.url, '_blank');
-          } catch (err) {
-            console.warn('Browser popup blocked:', err);
+        // If backend provided an active client action (e.g. open website, hide window)
+        if (response.action) {
+          if (response.action.type === 'hide_window') {
+            handleEnterBackgroundMode();
+          } else if (response.action.type === 'restore_window') {
+            setIsBackgroundMode(false);
+            isBackgroundModeRef.current = false;
+            triggerWakeup();
+          } else if (response.action.type === 'open_url' && !openedInBrowser) {
+            try {
+              window.open(response.action.url, '_blank');
+            } catch (err) {
+              console.warn('Browser popup blocked:', err);
+            }
           }
         }
 
@@ -551,13 +607,46 @@ export default function App() {
   };
 
   return (
-    <div className="hud-root">
+    <div className={`hud-root ${isBackgroundMode ? 'stealth-mode' : ''}`}>
       {/* Background Grid & Scanlines */}
-      <div className="hud-background" />
-      <div className="hud-scanlines" />
+      {!isBackgroundMode && <div className="hud-background" />}
+      {!isBackgroundMode && <div className="hud-scanlines" />}
 
       {/* Laser diagnostic scanline sweep */}
-      {isScanning && <div className="scan-line-sweep" />}
+      {isScanning && !isBackgroundMode && <div className="scan-line-sweep" />}
+
+      {/* Stealth Desktop Background Mode (Floating Micro Arc Reactor with Active Clap Radar) */}
+      {isBackgroundMode && (
+        <div
+          className="stealth-background-widget"
+          onClick={() => {
+            soundFX.playConfirm();
+            setIsBackgroundMode(false);
+            isBackgroundModeRef.current = false;
+            triggerWakeup();
+          }}
+          title="J.A.R.V.I.S. Stealth Background Mode — Clap hands or click to awaken"
+        >
+          <div className="stealth-core-outer">
+            <div className="stealth-core-spin" />
+            <div className="stealth-core-pulse" />
+            <Power size={18} className="stealth-core-icon" />
+          </div>
+          <div className="stealth-info">
+            <div className="stealth-title">J.A.R.V.I.S. // BACKGROUND STEALTH</div>
+            <div className="stealth-radar-bar">
+              <div
+                className="stealth-radar-fill"
+                style={{ width: `${Math.min(100, micVolume)}%` }}
+              />
+            </div>
+            <div className="stealth-status">
+              <Mic size={11} className="mic-pulse-icon" />
+              <span>CLAP TO WAKE [{micVolume}%]</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Awakening & Dormant Standby Overlay */}
       <WakeupOverlay
@@ -566,47 +655,53 @@ export default function App() {
         onTriggerWakeup={triggerWakeup}
         micVolume={micVolume}
         wakeStatusText={wakeStatusText}
+        isBackgroundMode={isBackgroundMode}
       />
 
       {/* Top Header */}
-      <HudHeader
-        currentTheme={currentTheme}
-        onThemeChange={(theme) => setCurrentTheme(theme)}
-        isMuted={isMuted}
-        onToggleMute={handleToggleMute}
-      />
+      {!isBackgroundMode && (
+        <HudHeader
+          currentTheme={currentTheme}
+          onThemeChange={(theme) => setCurrentTheme(theme)}
+          isMuted={isMuted}
+          onToggleMute={handleToggleMute}
+          onHideToBackground={handleEnterBackgroundMode}
+        />
+      )}
 
       {/* Central Interactive HUD Grid */}
-      <main className="hud-content">
-        {/* Left Telemetry Panel */}
-        <TelemetryPanel onTriggerScan={triggerDiagnosticScan} />
+      {!isBackgroundMode && (
+        <main className="hud-content">
+          {/* Left Telemetry Panel */}
+          <TelemetryPanel onTriggerScan={triggerDiagnosticScan} />
 
-        {/* Center Arc Reactor & Audio Visualizer */}
-        <ArcReactorVisualizer
-          isListening={isListening}
-          onToggleListen={toggleListening}
-          isJarvisSpeaking={isJarvisSpeaking}
-          statusMessage={statusMessage}
-          onQuickCommand={(cmd) => processCommand(cmd)}
-        />
+          {/* Center Arc Reactor & Audio Visualizer */}
+          <ArcReactorVisualizer
+            isListening={isListening}
+            onToggleListen={toggleListening}
+            isJarvisSpeaking={isJarvisSpeaking}
+            statusMessage={statusMessage}
+            onQuickCommand={(cmd) => processCommand(cmd)}
+          />
 
-        {/* Right Command Feed & Chat History with Database Integration */}
-        <CommandLogPanel
-          messages={messages}
-          onSendMessage={(msg) => processCommand(msg)}
-          ttsEnabled={ttsEnabled}
-          onToggleTts={() => setTtsEnabled(!ttsEnabled)}
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          onSelectSession={handleSelectSession}
-          onNewChat={handleNewChat}
-          onDeleteSession={handleDeleteSession}
-          isBackendConnected={isBackendConnected}
-        />
-      </main>
+          {/* Right Command Feed & Chat History with Database Integration */}
+          <CommandLogPanel
+            messages={messages}
+            onSendMessage={(msg) => processCommand(msg)}
+            ttsEnabled={ttsEnabled}
+            onToggleTts={() => setTtsEnabled(!ttsEnabled)}
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={handleSelectSession}
+            onNewChat={handleNewChat}
+            onDeleteSession={handleDeleteSession}
+            isBackendConnected={isBackendConnected}
+          />
+        </main>
+      )}
 
       {/* Hands-free Voice Floating Status Bar (When Awake) */}
-      {isAwake && (
+      {isAwake && !isBackgroundMode && (
         <div className={`hud-voice-floating-bar ${isListening ? 'active' : ''}`}>
           <div className="voice-status-pill">
             {isJarvisSpeaking ? (
@@ -649,7 +744,7 @@ export default function App() {
       )}
 
       {/* Bottom Status Footer */}
-      <HudFooter />
+      {!isBackgroundMode && <HudFooter />}
     </div>
   );
 }

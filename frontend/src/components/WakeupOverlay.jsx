@@ -8,6 +8,7 @@ export default function WakeupOverlay({
   onTriggerWakeup,
   micVolume = 0,
   wakeStatusText = 'LISTENING FOR CLAP OR WAKE WORD...',
+  isBackgroundMode = false,
 }) {
   const [bootSteps, setBootSteps] = useState([]);
 
@@ -32,7 +33,7 @@ export default function WakeupOverlay({
     }
   }, [isWakingUp]);
 
-  if (isAwake && !isWakingUp) return null;
+  if ((isAwake && !isWakingUp) || isBackgroundMode) return null;
 
   return (
     <div className={`wakeup-overlay ${isWakingUp ? 'igniting' : 'dormant'}`} onClick={!isWakingUp ? onTriggerWakeup : undefined}>

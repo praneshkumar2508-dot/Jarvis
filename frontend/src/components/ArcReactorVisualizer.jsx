@@ -269,12 +269,12 @@ export default function ArcReactorVisualizer({
       {/* Quick Voice & Desktop Command Chips */}
       <div className="hud-quick-chips">
         {[
-          'Launch Calculator',
-          'What is the weather in London?',
+          'Play Shape of You on YouTube',
+          'Send message on WhatsApp to Mom saying Hello',
+          'Send email via Gmail',
+          'Hide in background',
           'Take a desktop screenshot',
-          'Search the web for Quantum Computing',
           'Run full diagnostics',
-          'Mute system volume',
         ].map((cmd, idx) => (
           <button
             key={idx}

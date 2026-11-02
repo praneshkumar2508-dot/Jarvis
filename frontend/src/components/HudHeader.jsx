@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Maximize2, Shield, Radio } from 'lucide-react';
+import { Volume2, VolumeX, Maximize2, Shield, Radio, EyeOff } from 'lucide-react';
 import { soundFX } from '../utils/audioEffects';
 
 export default function HudHeader({
@@ -7,6 +7,7 @@ export default function HudHeader({
   onThemeChange,
   isMuted,
   onToggleMute,
+  onHideToBackground,
 }) {
   const [timeStr, setTimeStr] = useState('');
 
@@ -114,6 +115,20 @@ export default function HudHeader({
         >
           {isMuted ? <VolumeX size={17} /> : <Volume2 size={17} />}
         </button>
+
+        {/* Hide to Background (Clap to Wake) */}
+        {onHideToBackground && (
+          <button
+            className="hud-btn-icon hide-desktop-btn"
+            onClick={() => {
+              soundFX.playPowerDown();
+              onHideToBackground();
+            }}
+            title="Hide to Desktop Background (Clap hands anytime to wake J.A.R.V.I.S.)"
+          >
+            <EyeOff size={17} />
+          </button>
+        )}
 
         {/* Fullscreen Toggle */}
         <button
