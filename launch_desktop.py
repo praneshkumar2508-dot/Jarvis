@@ -54,13 +54,18 @@ def start_backend():
     log_path = os.path.join(BACKEND_DIR, "jarvis_server.log")
     server_log = open(log_path, "a", encoding="utf-8")
 
-    # Start detached/independent background server process
+    # Start background server process
+    creation_flags = 0
+    if sys.platform == "win32":
+        creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", f"--port={PORT}"],
         cwd=BACKEND_DIR,
         env=env,
         stdout=server_log,
-        stderr=subprocess.STDOUT
+        stderr=subprocess.STDOUT,
+        creationflags=creation_flags
     )
 
     # Wait for server to become responsive
@@ -138,7 +143,7 @@ def main():
         ensure_frontend_built()
 
     # 2. Start / verify backend server
-    start_backend()
+    proc = start_backend()
 
     # 3. Create Windows Desktop 1-click shortcut
     create_desktop_shortcut()
@@ -147,6 +152,16 @@ def main():
     launch_desktop_window(dev_mode=dev_mode)
     log("J.A.R.V.I.S. HUD successfully activated on your desktop.")
     log("==================================================")
+
+    # 5. Keep Neural Core alive if this launcher started it
+    if proc:
+        log("Neural Core active. Press Ctrl+C in this terminal to shutdown.")
+        try:
+            proc.wait()
+        except KeyboardInterrupt:
+            log("Shutting down J.A.R.V.I.S. Neural Core...")
+            proc.terminate()
+            proc.wait()
 
 if __name__ == "__main__":
     main()
